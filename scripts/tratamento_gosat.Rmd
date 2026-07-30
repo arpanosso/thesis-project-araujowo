@@ -1,0 +1,375 @@
+---
+title: "tratamento_gosat"
+author: "Araujo, WO"
+date: "2026-05-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  error = FALSE,
+  message = FALSE,
+  eval = TRUE,
+  comment = "#>"
+)
+```
+
+## Coleta e Preparação de Dados
+
+#### Nesta etapa, descrevemos o procedimento de aquisição dos dados brutos dos sensores GOSAT-1 e GOSAT-2, que precedem as etapas de processamento e análise.
+
+##### Aquisição de Dados: GOSAT_1
+
+Os dados do GOSAT-1 foram obtidos através do portal [GOSAT Data Archive Service (GDAS)](https://data2.gosat.nies.go.jp/index_en.html). O procedimento de download seguiu os seguintes passos:
+
+-   Seleção de Metadados: No portal, foram selecionadas as variáveis de interesse e o período temporal, gerando um arquivo de metadados no formato .txt contendo a lista de URLs para download.
+
+-   Automatização via API: Para a transferência dos arquivos, utilizou-se uma rotina de automação customizada disponível no diretório do projeto como (R/my_gosat_download.R).
+
+-   Método de Transferência: O script utiliza o utilitário "wget" para realizar as requisições de rede. Os dados foram baixados originalmente no formato de pacotes .tar, que agrupam os arquivos diários de metano.
+
+-   Série Temporal: 2015 a 2024 (Porém possui dados apartir de 2009 (ano de lançamento) até 2026).
+
+##### Aquisição de Dados: GOSAT_2
+
+Os dados do GOSAT-2 foram coletados via [acesso direto SFTP](https://prdct.gosat-2.nies.go.jp/aboutdata/directsftpaccess.html.en) disponibilizado pelo National Institute for Environmental Studies (NIES).
+
+-   Ferramenta de Transferência: Utilizou-se o software WinSCP para a conexão segura e sincronização dos diretórios.
+
+-   Formato de Dados: Diferente do sensor anterior, estes arquivos foram baixados diretamente no formato HDF5 (.h5), dispensando a etapa inicial de descompactação de tarballs.
+
+-   Série Temporal: 2019 a 2024 (Porém possui dados de 2019 a 2025).
+
+```{r}
+## Pacotes necessários para trabalhar com .tar e .h5
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("rhdf5")
+
+library(rhdf5)
+library(dplyr)
+library(stringr)
+library(purrr)
+library(lubridate)
+library(sf)
+library(ggplot2)
+```
+
+#### Faxina e Tratamento dos dados do GOSAT_2
+
+```{r}
+# ## Abrir um arquivo para ver os grupos e as variáveis a serem utilizados.
+# test <- ("../data-raw/GOSAT-2/2019/GOSAT2TFTS220190301_02SWFPV0220000018.h5")
+# structure <- h5ls(test)
+# str(structure)
+# View(structure)
+# 
+## Criando função para ler os arquivos .h5 e extrair as variáveis.
+# file_path <- "../data-raw/GOSAT-2/"
+# 
+# read_data <- function(file_path) {
+#   date <- tryCatch({
+#     latitude <- h5read(file_path, "/SoundingGeometry/latitude")
+#     longitude <- h5read(file_path, "/SoundingGeometry/longitude")
+#     height <- h5read(file_path, "/SoundingGeometry/height")
+#     startDate <- h5read(file_path, "/Metadata/startDate")
+#     endDate <- h5read(file_path, "/Metadata/endDate")
+#     xch4 <- h5read(file_path, "/RetrievalResult/xch4")
+#     xch4_quality_flag <- h5read(file_path, "/RetrievalResult/xch4_quality_flag")
+#     xco2 <- h5read(file_path, "/RetrievalResult/xco2")
+#     xco2_quality_flag <- h5read(file_path, "/RetrievalResult/xco2_quality_flag")
+#     xh2o <- h5read(file_path, "/RetrievalResult/xh2o")
+#     xh2o_quality_flag <- h5read(file_path, "/RetrievalResult/xh2o_quality_flag")
+#     xco <- h5read(file_path, "/RetrievalResult/xco")
+#     xco_quality_flag <- h5read(file_path, "/RetrievalResult/xco_quality_flag")
+# 
+#     # Criar um data.frame temporário com os dados deste arquivo
+#     df_temp <- data.frame(
+#       latitude = as.numeric(latitude),
+#       longitude = as.numeric(longitude),
+#       height = as.numeric(height),
+#       startDate = startDate,
+#       xch4 = as.numeric(xch4),
+#       xch4_quality_flag = as.numeric(xch4_quality_flag),
+#       xco2 = as.numeric(xco2),
+#       xco2_quality_flag = as.numeric(xco2_quality_flag),
+#       xh2o = as.numeric(xh2o_quality_flag),
+#       xh2o_quality_flag = as.numeric(xh2o_quality_flag),
+#       xco = as.numeric(xco),
+#       xco_quality_flag = as.numeric(xco_quality_flag)
+#     )
+# 
+#     df_temp <- df_temp |> 
+#       filter(
+#         latitude >= -35 & latitude <= 6,
+#         longitude >= -75 & longitude <= -33
+#       )
+#     
+#     return(df_temp)
+# 
+#   }, error = function(e) {
+#     message(paste("Erro ao ler o arquivo:", file_path))
+#     return(NULL)
+#   })
+# 
+#   return(date)
+# }
+```
+
+```{r}
+# ## Rodando a rotina para todos os arquivos
+# list_files <- list.files(file_path,
+#                              pattern = "\\.h5$",
+#                              full.names = TRUE,
+#                              recursive = TRUE)
+# 
+# df_gosat2 <- map_df(list_files, read_data)
+# 
+# print(df_gosat2)
+# summary(df_gosat2)
+# 
+# 
+# ## Corrigindo as datas do banco
+# df_gosat2 <- df_gosat2 |>
+#   mutate(
+#     date = as_date(startDate),
+#     year  = year(date),
+#     month = month(date),
+#     day   = day(date)
+#   )
+# summary(df_gosat2$year)
+# saveRDS(df_gosat2, "../data-raw/df_gosat2_br.rds")
+
+```
+
+```{r}
+## Recorte da Amazônia Legal
+
+# amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
+# amazon_shp <- st_transform(amazon_shp, 4326)
+# 
+# df_gosat2_br <- readRDS("../data-raw/df_gosat2_br.rds") |> 
+#   filter(year == 2022)
+# 
+# df_gosat2_br <- st_as_sf(df_gosat2_br,
+#                          coords = c("longitude", "latitude"),
+#                          crs = 4326,
+#                          remove = FALSE)
+# 
+# df_gosat2_amazon <- st_filter(df_gosat2_br, amazon_shp)
+# View(df_gosat2_amazon)
+
+# ## Visualizando 
+# ggplot() +
+#   geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
+#   geom_sf(data = df_gosat2_amazon, aes(color = xch4), size = 1.5, alpha = 0.7) +
+#   scale_color_viridis_c(option = "plasma", name = "XCH4 (ppb)") +
+#   theme_minimal() +
+#   labs(
+#     title = "Monitoramento de Metano na Área de Estudo",
+#     subtitle = paste("Total de observações:", nrow(df_gosat2_amazon)),
+#     x = "Longitude", 
+#     y = "Latitude"
+#   )
+
+## saveRDS(df_gosat2_amazon, "../data/data-set-gosat2.rds")
+```
+
+
+```{r}
+# library(ggplot2)
+# library(maps)
+# 
+# # 1. Carregar o mapa-múndi básico
+# world_map <- map_data("world")
+# 
+# 
+# banco_final_ch4 <- df_gosat_world |> 
+#   filter(year == 2022)
+# 
+# # 2. Criar a visualização
+# ggplot() +
+#   # Camada do mapa-múndi (cinza claro para não ofuscar os pontos)
+#   geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
+#                fill = "#f2f2f2", color = "white", size = 0.1) +
+#   # Camada das visadas do satélite
+#   geom_point(data = banco_final_ch4, 
+#              aes(x = longitude, y = latitude, color = xh2o), 
+#              size = 0.1,    # Pontos bem pequenos para ver as faixas
+#              alpha = 0.4) + # Transparência para destacar sobreposições
+#   # Cores científicas para o Metano
+#   scale_color_viridis_c(option = "viridis", name = "XCH4") +
+#   # Ajustar a visão para o mapa inteiro
+#   coord_fixed(1.3) +
+#   theme_minimal() +
+#   labs(title = "Trajetórias Globais de Varredura - GOSAT",
+#        subtitle = "As linhas representam as órbitas de visada do sensor",
+#        x = "Longitude", y = "Latitude") +
+#   theme(legend.position = "bottom")
+```
+
+
+#### Faxina e Tratamento dos dados do GOSAT_1
+
+-   Os arquivos .tar consistem em pacotes mensais que contêm arquivos .h5 diários. Para otimizar o fluxo de trabalho, desenvolveremos uma rotina de extração automática desses arquivos para uma pasta única. Isso evita a necessidade de descompactação manual e a criação excessiva de subpastas redundantes.
+-   Como cada variável possui um arquivo .tar, será preciso adaptar a rotina abaixo para a variável de interesse. 
+
+```{r}
+# ## Abrir e extrair arquivos .tar
+# # 1. Definir caminhos
+# path_gosat <- "../data-raw/h2o/"
+# 
+# h2o_h5 <- "../data-raw/h2o_h5/" # Pasta onde tudo será centralizado
+# if(!dir.exists(h2o_h5)) dir.create(h2o_h5, recursive = TRUE) # Criar a pasta de destino se ela não existir
+# 
+# # 2. Listar os arquivos .tar (com ignore.case para evitar erro de .TAR)
+# file_tar <- list.files(path_gosat, pattern = "\\.tar$", full.names = TRUE, ignore.case = TRUE)
+# 
+# # 3.Função para extrair e colocar todos os arquivos em uma unica pasta
+# extract_move <- function(file_tar) {
+#   message(paste("Processando:", basename(file_tar)))
+#   
+#   temporary <- tempfile("extracting_") # Criar uma pasta temporária apenas para este .tar
+#   dir.create(temporary)
+#   untar(file_tar, exdir = temporary) # Extrair o .tar para a pasta temporária
+#   
+#   # Buscar todos os arquivos .h5 dentro dessa pasta temporária
+#   file_h5 <- list.files(temporary, pattern = "\\.h5$", recursive = TRUE, full.names = TRUE)
+#   
+#   # Mover cada arquivo .h5 para a pasta_destino
+#   if(length(file_h5) > 0) {
+#     file.copy(from = file_h5, to = h2o_h5, overwrite = TRUE)
+#   }
+#   unlink(temporary, recursive = TRUE) # Deletar a pasta temporária para não encher o HD
+# }
+# 
+# # 4. Rodar para todos os arquivos
+# lapply(file_tar, extract_move)
+# 
+# message("--- Concluído! Todos os arquivos .h5 estão em: ", h2o_h5, " ---")
+```
+
+
+```{r}
+# ## Abrir um arquivo para ver os grupos e as variáveis a serem utilizados.
+# test <- ("../data-raw/h2o_h5/GOSATTFTS20150201_02C03SV0300R150201GU000.h5")
+# structure <- h5ls(test)
+# str(structure)
+# View(structure)
+# 
+# # Criando função para ler os arquivos .h5 e extrair as variáveis.
+# file_path <- "../data-raw/h2o_h5/"
+# 
+# read_data <- function(file_path) {
+#   date <- tryCatch({
+#     latitude <- h5read(file_path, "/Data/geolocation/latitude")
+#     longitude <- h5read(file_path, "/Data/geolocation/longitude")
+#     height <- h5read(file_path, "/Data/geolocation/height")
+#     #startDate <- h5read(file_path, "/Metadata/startDate")
+#     h2o <- h5read(file_path, "/Data/mixingRatio/XH2O")
+#     time <- h5read(file_path, "/scanAttribute/time")
+# 
+#     # Criar um data.frame temporário com os dados deste arquivo
+#     df_temp <- data.frame(
+#       latitude = as.numeric(latitude),
+#       longitude = as.numeric(longitude),
+#       height = as.numeric(height),
+#       #startDate = startDate,
+#       h2o = as.numeric(h2o),
+#       time = time
+#     )
+# 
+#     df_temp <- df_temp |>
+#       filter(
+#         latitude >= -35 & latitude <= 6,
+#         longitude >= -75 & longitude <= -33
+#       )
+# 
+#     return(df_temp)
+# 
+#   }, error = function(e) {
+#     message(paste("Erro ao ler o arquivo:", file_path))
+#     return(NULL)
+#   })
+#   
+#   return(date)
+# }
+```
+
+```{r}
+# ## Rodando a rotina para todos os arquivos
+# list_files <- list.files(file_path,
+#                              pattern = "\\.h5$",
+#                              full.names = TRUE,
+#                              recursive = TRUE)
+# 
+# df_gosat1 <- map_df(list_files, read_data)
+# 
+# print(df_gosat1)
+# summary(df_gosat1)
+# 
+# 
+# ## Corrigindo as datas do banco
+# df_gosat1 <- df_gosat1 |>
+#   mutate(
+#     date = as_date(time),
+#     year  = year(date),
+#     month = month(date),
+#     day   = day(date)
+#   )
+# summary(df_gosat1$year)
+## saveRDS(df_gosat1, "../data-raw/df_h2o_gosat1_br.rds")
+```
+
+```{r}
+# ## Unindo as variáveis em um unico banco, visto que todas são do GOSAT-1 e possuem as mesmas coordenadas para as observações com leituras no mesmo dia e horarios. 
+# 
+# df_xco2_gosat1 <- readRDS("../data-raw/df_co2_gosat1_br.rds")
+# df_xh2o_gosat1 <- readRDS("../data-raw/df_h2o_gosat1_br.rds")
+# df_xch4_gosat1 <- readRDS("../data-raw/df_ch4_gosat1_br.rds")
+# 
+# df_gosat1 <- df_xch4_gosat1 |> 
+#   inner_join(df_xco2_gosat1,
+#              by = c("date", "year", "month", "day", "time", "height", "latitude", "longitude")) |> 
+#   inner_join(df_xh2o_gosat1,
+#              by = c("date", "year", "month", "day", "time", "height", "latitude", "longitude")) |> 
+#   select(latitude, longitude, height, time, date, year, month, day, xch4, xco2, h2o)
+# 
+# # saveRDS(df_gosat1, "../data-raw/df_gosat1_br.rds")
+```
+
+
+```{r}
+# ## Recorte da Amazônia Legal
+# amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
+# amazon_shp <- st_transform(amazon_shp, 4326)
+# 
+# df_gosat1_br <- readRDS("../data-raw/df_gosat1_br.rds")
+# 
+# df_gosat1_br <- st_as_sf(df_gosat1_br,
+#                          coords = c("longitude", "latitude"),
+#                          crs = 4326,
+#                          remove = FALSE)
+# 
+# df_gosat1_amazon <- st_filter(df_gosat1_br, amazon_shp)
+# View(df_gosat1_amazon)
+# 
+# ## Visualizando
+# ggplot() +
+#   geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
+#   geom_sf(data = df_gosat1_amazon, aes(color = xch4), size = 1.5, alpha = 0.7) +
+#   scale_color_viridis_c(option = "plasma", name = "XCH4 (ppb)") +
+#   theme_minimal() +
+#   labs(
+#     title = "Monitoramento de Metano na Área de Estudo",
+#     subtitle = paste("Total de observações:", nrow(df_gosat1_amazon)),
+#     x = "Longitude",
+#     y = "Latitude"
+#   )
+# 
+# # saveRDS(df_gosat1_amazon, "../data/data-set-gosat1.rds")
+```
+

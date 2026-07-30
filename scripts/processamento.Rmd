@@ -1,0 +1,112 @@
+---
+title: "Pré-Processamento"
+author: "Araujo, WO; Panosso, AR"
+date: "2026-03-25"
+output: html_document
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  error = FALSE,
+  message = FALSE,
+  eval = TRUE,
+  comment = "#>"
+)
+```
+
+
+# Preparação dos dados para análise.
+
+```{r}
+### Carregando os pacotes
+library(sf)
+library(tidyverse)
+```
+
+
+## Criando o grid com base na minha variável de interesse
+
+```{r}
+
+```
+
+
+
+## Entrada com a Base: data-set-xco2.rds
+#### Essa base é composta por dados de dióxido de carbono na coluna atmosférica (XCO2) provenientes dos satélites OCO-2 e OCO-3 (NASA), compreendendo o período de 2014 a 2024.
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Entrada com a Base: data-set-sif.rds
+#### Essa base é composta por dados da Solar-Induced Fluorescence (SIF) provenientes dos satélites OCO-2 e OCO-3 (NASA), compreendendo o período de 2014 a 2024.
+
+```{r}
+data_set_sif <- readr::read_rds("data/data-set-sif.rds")
+```
+
+## Integrando as bases de dados de XCO2 e SIF através do método do vizinho mais próximo (Nearest Neighbor), restringindo-se a uma distância máxima de 10 km para assegurar a representatividade biofísica entre as variáveis atmosféricas e de vegetação.
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

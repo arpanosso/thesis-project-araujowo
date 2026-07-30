@@ -1,0 +1,441 @@
+---
+title: "Faxina e tratamento inicial"
+author: "Araujo, WO"
+date: "2026-03-12"
+output: html_document
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  error = FALSE,
+  message = FALSE,
+  eval = TRUE,
+  comment = "#>"
+)
+```
+
+# Projeto de Tese - Witória Araujo - FAPESP
+
+### VARIABILIDADE ESPAÇOTEMPORAL DE XCO2 E SIF NA AMAZÔNIA LEGAL: ABORDAGEM EM APRENDIZADO DE MÁQUINA ESTATÍSTICO
+
+```{r}
+### Carregando os pacotes
+library(tidyverse)
+library(ggridges)
+library(ggpubr)
+library(geobr)
+library(sf)
+library(dplyr)
+library(gstat)
+library(vegan)
+library(ncdf4)
+library(furrr)
+library(future)
+library(mgcv)
+source("R/my-function.R")
+```
+
+#### Faxina e Processamento de Dados da SIF (solar induced fluorescence) OCO-2 e OCO-3/NASA.
+
+```{r}
+# ## Lista com caminho e nomes dos arquivo a serem lidos - sif.
+# list_of_files <- list.files("data-raw/oco-3-sif/",
+#                             pattern = ".nc4",
+#                             full.names = TRUE)
+```
+
+```{r}
+# ## buscando o contorno do Brasil.
+# br <- geobr::read_country(showProgress = FALSE)
+# pol_br <- br$geom |> purrr::pluck(1) |> as.matrix()
+# def_pol <- function(x, y, pol){
+#   as.logical(sp::point.in.polygon(point.x = x,
+#                                   point.y = y,
+#                                   pol.x = pol[,1],
+#                                   pol.y = pol[,2]))
+# }
+```
+
+```{r}
+# # Buscar os nomes dos arquivo .nc4.
+# list_nc4_sif <- list.files("data-raw/oco-3-sif/",
+#            recursive = TRUE,
+#            full.names = TRUE,
+#            pattern = "\\.nc4$")
+# list_nc4_sif <- grep("data-raw/oco-3-sif/", list_nc4_sif, value = TRUE)
+# length(list_nc4_sif)
+# 
+# ## Abrindo 01 arquivo.
+# nc_obj <- nc_open(list_nc4_sif[1])
+# 
+# ## buscando os nomes dos atributos no arquivo.
+# names(nc_obj[['var']])
+```
+
+```{r}
+# ## Função para ler arquivos NCD4 e extrair as variáveis de interesse e montar a tabela.
+# ncdf_reader <- function(file_path){
+#   nc_file <- ncdf4::nc_open(file_path)
+#   df <- data.frame(
+#     "time"=ncdf4::ncvar_get(nc_file,varid="Delta_Time"),
+#     "sza"=ncdf4::ncvar_get(nc_file,varid="SZA"),
+#     "vza"=ncdf4::ncvar_get(nc_file,varid="VZA"),
+#     "saz"=ncdf4::ncvar_get(nc_file,varid="SAz"),
+#     "vaz"=ncdf4::ncvar_get(nc_file,varid="VAz"),
+#     "longitude"=ncdf4::ncvar_get(nc_file,varid="Longitude"),
+#     "latitude"=ncdf4::ncvar_get(nc_file,varid="Latitude"),
+#     "sif740"=ncdf4::ncvar_get(nc_file,varid="SIF_740nm"),
+#     "sif740_uncertainty"=ncdf4::ncvar_get(nc_file,varid="SIF_Uncertainty_740nm"),
+#     "daily_sif740"=ncdf4::ncvar_get(nc_file,varid="Daily_SIF_740nm"),
+#     "daily_sif757"=ncdf4::ncvar_get(nc_file,varid="Daily_SIF_757nm"),
+#     "daily_sif771"=ncdf4::ncvar_get(nc_file,varid="Daily_SIF_771nm"),
+#     "quality_flag"=ncdf4::ncvar_get(nc_file,varid="Quality_Flag"),
+#     "path" = file_path
+#   )
+# 
+# ## Fechamento da conexão.
+#   ncdf4::nc_close(nc_file)
+# 
+# ## Recorte Espacial da área de interesse.
+#   df <- df |>
+#   dplyr::filter(longitude >= -80 &
+#                   longitude <= -32,
+#                 latitude >= -34 &
+#                   latitude <= 10)
+#   return(df)
+# }
+# 
+# ## Visualizando um arquivo.
+# df <- ncdf_reader(list_of_files[1])
+# 
+# ## Visualizando a área de recorte.
+# plot(df$longitude,df$latitude)
+```
+
+```{r}
+# Recortando e salvando arquivo rds.
+# dff_3 <- purrr::map_df(list_of_files,ncdf_reader) # Deixar bloqueado para não rodar sempre.
+# readr::write_rds(dff_3,"data-raw/dff_3.rds")
+
+# df3 <- readr::read_rds("data-raw/dff_3.rds")
+# dplyr::glimpse(df3)
+```
+
+```{r}
+# ## O processamento dos dados da sif, foram feitos por partes, devido ao tamanho dos arquivos (df1 <- 2014-2019OCO-2; df2 <- 2020-2024OCO-2; df3 <- 2020-2024OCO-3). Então aqui sera feito a junção dos .rds
+# df1 <- readr::read_rds("data-raw/dff_1.rds")
+# df2 <- readr::read_rds("data-raw/dff_2.rds")
+# df3 <- readr::read_rds("data-raw/dff_3.rds")
+# 
+# ## Juntando os .rds
+# df_sif <- rbind(df1,df2,df3)
+# readr::write_rds(df_sif, "data-raw/dff_sif.rds")
+```
+
+```{r}
+# ## Corrigindo e extraindo ano/mês/dia do timestamp
+# data_set_sif <- readr::read_rds("data-raw/dff_sif.rds") |>
+# dplyr::mutate(
+#     time = lubridate::as_datetime(time,
+#                                   origin = "1990-01-01 00:00:00",
+#                                   tz = "America/Sao_Paulo"),
+#     year = lubridate::year(time),
+#     month = lubridate::month(time),
+#     day = lubridate::day(time),
+#   )
+# 
+# dplyr::glimpse(data_set_sif)
+# readr::write_rds(data_set_sif,"data/data-set-sif-br.rds")
+```
+
+
+##### Recortando minha área de interesse
+
+```{r}
+# data_set_sif_amazon <- readr::read_rds("data/data-set-sif-br.rds") |>
+#   dplyr::filter(
+#     longitude >= -74, longitude <= -44, # Limites aproximados da Amazônia Legal
+#     latitude >= -18,  latitude <= 6
+#   )
+# readr::write_rds(data_set_sif_amazon, "data-raw/df_sif_amazon.rds")
+
+```
+
+```{r}
+# ## Baixar o Polígono da Amazônia Legal
+# amazon <- geobr::read_amazon(showProgress = FALSE)
+# states <- geobr::read_state(showProgress = FALSE)
+# 
+# para_pol <- states$geom[5] |> purrr::pluck(1) |> as.matrix()
+# amazon_pol <- amazon$geom |> purrr::pluck(1) |> as.matrix()
+# amazonas_pol <- states$geom[3] |> purrr::pluck(1) |> as.matrix()
+```
+
+```{r}
+# ## Chamando a base e filtrando
+# df_sif <- readr::read_rds("data-raw/df_sif_amazon.rds") |>
+#   filter(quality_flag == 0,
+#          year != 2014) |>
+#   select(
+#     longitude,
+#     latitude,
+#     daily_sif757,
+#     daily_sif771, # Precisamos dela para calcular a SIF final
+#     quality_flag,
+#     year,
+#     month,
+#     day) |>
+#   mutate( date = make_date(year, month, day),
+#           sif = (daily_sif757 + 1.5 * daily_sif771) / 2
+#   )
+# 
+# df_sif_amazon <- df_sif |>
+#   # dplyr::filter(year == 2015) |>
+#   dplyr::mutate(
+#     flag_amazon = def_pol(longitude, latitude, amazon_pol),
+#     flag_para = def_pol(longitude,latitude,para_pol),
+#     flag_amazonas = def_pol(longitude,latitude,amazonas_pol)
+#   ) |>
+#   dplyr::filter(flag_amazon == TRUE | flag_para == TRUE | flag_amazonas == TRUE) # Para manter apenas o que é Amazônia
+# 
+# ## Visualizando
+# ggplot()+
+#   geom_sf(data = amazon, fill= "transparent", color= "black") +
+#   geom_point(data = df_sif_amazon,
+#              aes(x= longitude, y= latitude, color= sif),
+#              size = 0.5, alpha = 0.6) +
+#   scale_color_viridis_c(option = "viridis") +
+#   theme_bw() +
+#   labs(title = "Distribuição de SIF - Amazônia Legal (2014)",
+#        x = "Longitude", y = "Latitude", color = "SIF")
+# 
+# 
+# 
+# readr::write_rds(df_sif_amazon, "data/data-set-sif.rds")
+```
+
+
+```{r}
+# ## Remover ano de 2014, pois a série-temporal sera de somente 10 anos.
+# data_set_sif <- readr::read_rds("data/data-set-sif.rds") |> 
+#   filter(year != 2014)
+# 
+# ## Conferindo
+# contagem_anos <- data_set_sif |>
+#   group_by(year) |>
+#   summarise(n_observacoes = n()) |>
+#   arrange(year)
+# print(contagem_anos)
+# 
+# readr::write_rds(data_set_sif, "data/data-set-sif.rds")
+```
+
+
+#### Criando o shape da Amazônia Legal para poupar tempo quando for baixar outros dados (Exemplo Nasa Power).
+
+```{r}
+# ## Filtra os estados novamente (garantindo que são objetos espaciais 'sf')
+# pa <- states |> filter(abbrev_state == "PA")
+# am <- states |> filter(abbrev_state == "AM")
+# 
+# ## Une tudo espacialmente
+# # O st_union resolve o problema de 'fechar' os polígonos para você
+# pol_amazon_sf <- st_union(amazon, pa) |> 
+#   st_union(am) |> 
+#   st_make_valid() # Corrige qualquer erro de fechamento ou sobreposição
+# 
+# st_write(pol_amazon_sf, "data/pol_amazon.shp", delete_dsn = TRUE)
+```
+
+
+```{r}
+# sif <- readr::read_rds("data/data-set-sif.rds")
+# 
+# ggplot()+
+#   geom_sf(data = pol_amazon_sf, fill= "transparent", color= "black") +
+#   geom_point(data = sif,
+#              aes(x= longitude, y= latitude, color= sif),
+#              size = 0.5, alpha = 0.6) +
+#   scale_color_viridis_c(option = "viridis") +
+#   theme_bw() +
+#   labs(title = "Distribuição de SIF - Amazônia Legal (2014)",
+#        x = "Longitude", y = "Latitude", color = "SIF")
+```
+
+
+#### Faxina e Processamento de Dados de CO2 Atmosférico (XCO2) do OCO-2 e OCO-3/NASA.
+
+
+```{r}
+# ## Lista com caminho e nomes dos arquivo a serem lidos - xco2.
+# list_of_files <- list.files("data-raw/xco2/",
+#                             pattern = ".nc4",
+#                             full.names = TRUE)
+```
+
+```{r}
+# ## buscando o contorno do Brasil.
+# br <- geobr::read_country(showProgress = FALSE)
+# pol_br <- br$geom |> purrr::pluck(1) |> as.matrix()
+# def_pol <- function(x, y, pol){
+#   as.logical(sp::point.in.polygon(point.x = x,
+#                                   point.y = y,
+#                                   pol.x = pol[,1],
+#                                   pol.y = pol[,2]))
+# }
+```
+
+```{r}
+# # Buscar os nomes dos arquivo .nc4.
+# list_nc4_xco2 <- list.files("data-raw/xco2/",
+#            recursive = TRUE,
+#            full.names = TRUE,
+#            pattern = "\\.nc4$")
+# list_nc4_xco2 <- grep("data-raw/xco2/", list_nc4_xco2, value = TRUE)
+# length(list_nc4_xco2)
+# 
+# # ## Abrindo 01 arquivo.
+# # nc_obj <- nc_open(list_nc4_xco2[1])
+# # 
+# # ## buscando os nomes dos atributos no arquivo.
+# # names(nc_obj[['var']])
+```
+
+```{r}
+# ## Função para ler arquivos NCD4 e extrair as variáveis de interesse e montar a tabela.
+# ncdf_reader <- function(file_path){
+#   nc_file <- ncdf4::nc_open(file_path)
+#   df <- data.frame(
+#     "longitude"=ncdf4::ncvar_get(nc_file,varid="longitude"),
+#     "latitude"=ncdf4::ncvar_get(nc_file,varid="latitude"),
+#     "time"=ncdf4::ncvar_get(nc_file,varid="time"),
+#     "xco2"=ncdf4::ncvar_get(nc_file,varid="xco2"),
+#     "xco2_quality_flag"=ncdf4::ncvar_get(nc_file,varid="xco2_quality_flag"),
+#     "xco2_incerteza"=ncdf4::ncvar_get(nc_file,varid="xco2_uncertainty"),
+#     "path" = file_path
+#   )
+# 
+# ## Fechamento da conexão.
+#   ncdf4::nc_close(nc_file)
+# 
+# ## Recorte Espacial da área de interesse.
+#   df <- df |>
+#   dplyr::filter(longitude >= -80 &
+#                   longitude <= -32,
+#                 latitude >= -34 &
+#                   latitude <= 10)
+#   return(df)
+# }
+# 
+# ## Visualizando um arquivo.
+# df <- ncdf_reader(list_of_files[1])
+# 
+# ## Visualizando a área de recorte.
+# plot(df$longitude,df$latitude)
+```
+
+```{r}
+# # Recortando e salvando arquivo de XCO2 .rds.
+# # df_2 <- purrr::map_df(list_of_files,ncdf_reader) # Deixar bloqueado para não rodar sempre.
+# # readr::write_rds(df_2,"data-raw/df_2.rds")
+# 
+# # df1 <- readr::read_rds("data-raw/df_1.rds")
+# dplyr::glimpse(df_2)
+```
+
+
+```{r}
+# ## O processamento dos dados do XCO2, foram feitos por partes devido ao tamanho dos arquivos (df1 <- 2014-2019OCO-2; df2 <- 2020-2024 OCO-2 e OCO-3). Então aqui sera feito a junção dos .rds
+# df1 <- readr::read_rds("data-raw/df_1.rds")
+# df2 <- readr::read_rds("data-raw/df_2.rds")
+# 
+# ## Juntando os .rds
+# df_xco2 <- rbind(df1,df2)
+# readr::write_rds(df_xco2, "data-raw/df_xco2.rds")
+```
+
+```{r}
+# ## Corrigindo e extraindo ano/mês/dia do timestamp
+# data_set_xco2 <- readr::read_rds("data-raw/df_xco2.rds") |>
+# dplyr::mutate(
+#     time = lubridate::as_datetime(time,
+#                                   origin = "1970-01-01 00:00:00",
+#                                   tz = "America/Sao_Paulo"),
+#     year = lubridate::year(time),
+#     month = lubridate::month(time),
+#     day = lubridate::day(time),
+#   )
+# 
+# dplyr::glimpse(data_set_xco2)
+# readr::write_rds(data_set_xco2,"data/data-set-xco2-br.rds")
+```
+
+```{r}
+# df_xco2_amazon <- readr::read_rds("data/data-set-xco2-br.rds") |>
+#   dplyr::filter(
+#     longitude >= -74, longitude <= -44, # Limites aproximados da Amazônia Legal
+#     latitude >= -18,  latitude <= 6
+#   )
+# 
+# readr::write_rds(df_xco2_amazon, "data-raw/df_xco2_amazon.rds")
+
+```
+
+```{r}
+# ## Baixar o Polígono da Amazônia Legal
+# amazon <- geobr::read_amazon(showProgress = FALSE)
+# states <- geobr::read_state(showProgress = FALSE)
+# 
+# para_pol <- states$geom[5] |> purrr::pluck(1) |> as.matrix()
+# amazon_pol <- amazon$geom |> purrr::pluck(1) |> as.matrix()
+# amazonas_pol <- states$geom[3] |> purrr::pluck(1) |> as.matrix()
+```
+
+```{r}
+# ## Chamando a base e filtrando
+# df_xco2 <- readr::read_rds("data-raw/df_xco2_amazon.rds") |>
+#   filter(xco2_quality_flag == 0) |> 
+#   mutate(date = make_date(year, month, day)) |> 
+#   select(-path, -time)
+# 
+# df_xco2_amazon <- df_xco2 |>
+#   # dplyr::filter(year == 2014) |>
+#   dplyr::mutate(
+#     flag_amazon = def_pol(longitude, latitude, amazon_pol),
+#     flag_para = def_pol(longitude,latitude,para_pol),
+#     flag_amazonas = def_pol(longitude,latitude,amazonas_pol)
+#   ) |>
+#   dplyr::filter(flag_amazon == TRUE | flag_para == TRUE | flag_amazonas == TRUE) # Para manter apenas o que é Amazônia
+# 
+# ## Visualizando
+# ggplot()+
+#   geom_sf(data = amazon, fill= "transparent", color= "black") +
+#   geom_point(data = df_xco2_amazon,
+#              aes(x= longitude, y= latitude, color= xco2),
+#              size = 0.5, alpha = 0.6) +
+#   scale_color_viridis_c(option = "viridis") +
+#   theme_bw() +
+#   labs(title = "Distribuição de XCO2 - Amazônia Legal (2015-2024)",
+#        x = "Longitude", y = "Latitude", color = "XCO2")
+# 
+
+##readr::write_rds(df_xco2_amazon, "data/data-set-xco2.rds")
+```
+
+```{r}
+# ## Retirando o ano de 2014.
+# df_xco2_amazon <- readr::read_rds("data/data-set-xco2.rds") |> 
+#   filter(year != 2014)
+# 
+# ## Conferindo 
+# contagem_anosco2 <- df_xco2_amazon |>
+#   group_by(year) |>
+#   summarise(n_observacoes = n()) |>
+#   arrange(year)
+# print(contagem_anosco2)
+# 
+# readr::write_rds(df_xco2_amazon, "data/data-set-xco2.rds")
+```
+

@@ -1,0 +1,206 @@
+---
+title: "Untitled"
+author: "Witoria Araujo"
+date: "2026-05-04"
+output: html_document
+---
+
+```{r}
+library(nasapower) 
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(lubridate)
+library(tibble)
+library(writexl)
+library(sf)
+```
+
+#### Os dados do NASA POWER que serão usados nesse projeto, correspondem aos anos de 2015 a 2024, sendo as variáveis: Temperatura média (T2M), Temperatura Max. (T2M_MAX), Temperatura Min. (T2M_MIN), Precipitação (PRECTOTCORR), Umidade relativa do ar (RH2M), Velocidade do vento (WS2M) e Radiação solar (ALLSKY_SFC_SW_DWN)
+
+
+```{r}
+# Carregar seu shapefile oficial
+pol_amazon_sf <- st_read("data/pol_amazon.shp")
+
+# Definir a resolução do grid (0.25 como no seu original)
+dist_grid <- 0.25
+
+# Criar um grid de pontos que cobre a área do shapefile
+grid_completo <- pol_amazon_sf |> 
+  st_make_grid(cellsize = dist_grid, what = "centers") |> 
+  st_as_sf() |> 
+  st_intersection(pol_amazon_sf) # MANTÉM APENAS O QUE ESTÁ DENTRO DA AMAZÔNIA
+
+# Transformar em tabela de coordenadas para o NASA POWER
+grid_nasapower <- grid_completo |> 
+  mutate(longitude = st_coordinates(grid_completo)[, 1],
+         latitude  = st_coordinates(grid_completo)[, 2]) |> 
+  st_drop_geometry() |> 
+  as_tibble()
+
+# Verificação visual (Opcional)
+plot(st_geometry(pol_amazon_sf))
+points(grid_nasapower$longitude, grid_nasapower$latitude, pch=".", col="red")
+
+```
+
+
+
+```{r}
+# Divide o total de pontos em 4 partes iguais para os downloads
+n_pontos <- nrow(grid_nasapower)
+indices <- cut(seq_len(n_pontos), breaks = 4, labels = FALSE)
+
+quadrante_1 <- grid_nasapower[indices == 1, ]
+quadrante_2 <- grid_nasapower[indices == 2, ]
+quadrante_3 <- grid_nasapower[indices == 3, ]
+quadrante_4 <- grid_nasapower[indices == 4, ]
+
+message(paste("Total de pontos para baixar na Amazônia:", n_pontos))
+```
+
+
+```{r}
+# Intervalo desejado
+data_inicio <- ymd("2015-01-01")
+data_fim    <- ymd("2024-12-31")
+
+dates = c(data_inicio, data_fim)
+
+safe_get_power <- purrr::possibly(
+  .f = nasapower::get_power,
+  otherwise = NULL,
+  quiet = FALSE
+)
+
+# 2. Função para baixar e processar UM ponto
+
+download_e_processa_ponto <- function(lon_ponto, lat_ponto) {
+  
+  message(paste(">> Baixando Lon:", lon_ponto, "| Lat:", lat_ponto))
+  
+  variaveis_power <- c("T2M", "PRECTOTCORR", "T2M_MAX", "T2M_MIN", "RH2M", "WS2M", "ALLSKY_SFC_SW_DWN")
+  
+  dados_pt <- safe_get_power(
+    community    = "ag",
+    temporal_api = "daily",
+    pars         = variaveis_power,  
+    lonlat       = c(as.numeric(lon_ponto), as.numeric(lat_ponto)),
+    dates        = c(data_inicio, data_fim)  # <-- usa o intervalo definido acima
+  )
+  
+  if (is.null(dados_pt)) {
+    warning(paste("Falha no download para Lon:", lon_ponto, "| Lat:", lat_ponto))
+    return(NULL) 
+  }
+  
+  dados_pt <- dados_pt |>
+    as_tibble() |>
+    rename_with(tolower)
+  
+# Normalizar a data
+  if ("yyyymmdd" %in% names(dados_pt)) {
+    dados_pt <- dados_pt |> mutate(date = ymd(yyyymmdd))
+  } else if (!"date" %in% names(dados_pt)) {
+    message(paste("⚠️ Ponto (", lon_ponto, ",", lat_ponto, ") sem coluna de data."))
+  }
+  
+  return(dados_pt)
+}
+
+message("✅ Funções 'safe_get_power' e 'download_e_processa_ponto' prontas!")
+```
+
+
+```{r}
+# Quadrante 1 
+message("\nIniciando Quadrante 1...")
+
+dados_finais_q1 <- quadrante_1 |>
+  mutate(dados = purrr::map2(longitude, latitude, download_e_processa_ponto)) |>
+  filter(!map_lgl(dados, is.null)) |>
+  unnest(cols = c(dados))
+
+saveRDS(dados_finais_q1, "dados_nasa_Q1_25.rds")
+```
+
+```{r}
+message("\nIniciando Quadrante 2...")
+
+dados_finais_q2 <- quadrante_2 |>
+  mutate(dados = purrr::map2(longitude, latitude, download_e_processa_ponto)) |>
+  filter(!map_lgl(dados, is.null)) |>
+  unnest(cols = c(dados))
+
+saveRDS(dados_finais_q2, "dados_nasa_Q2_25.rds")
+```
+
+```{r}
+message("\nIniciando Quadrante 3...")
+
+dados_finais_q3 <- quadrante_3 |>
+  mutate(dados = purrr::map2(longitude, latitude, download_e_processa_ponto)) |>
+  filter(!map_lgl(dados, is.null)) |>
+  unnest(cols = c(dados))
+
+saveRDS(dados_finais_q3, "dados_nasa_Q3_25.rds")
+```
+
+```{r}
+message("\nIniciando Quadrante 4...")
+
+dados_finais_q4 <- quadrante_4 |>
+  mutate(dados = purrr::map2(longitude, latitude, download_e_processa_ponto)) |>
+  filter(!map_lgl(dados, is.null)) |>
+  unnest(cols = c(dados))
+
+# Corrigido para salvar como Q4
+saveRDS(dados_finais_q4, "dados_nasa_Q4_25.rds")
+```
+
+
+
+```{r}
+# 1. Carregar os 4 arquivos .rds para formar um unico banco do NASA POWER 
+q1 <- readRDS("dados_nasa_Q1_25.rds")
+q2 <- readRDS("dados_nasa_Q2_25.rds")
+q3 <- readRDS("dados_nasa_Q3_25.rds")
+q4 <- readRDS("dados_nasa_Q4_25.rds")
+
+
+dados_nasapower_25 <- dplyr::bind_rows(q1, q2, q3, q4)
+
+
+saveRDS(dados_nasapower_25, file = "data-raw/dados_nasapower_25.rds")
+
+
+message("Arquivo final combinado criado!")
+glimpse(dados_nasapower_25)
+
+```
+
+```{r}
+## Limpando o banco de dados e mantendo somente as variáveis de interesse.
+nasa_power <- dados_nasapower_25 |> 
+  select(
+    longitude = lon,     # Novo nome = Nome antigo
+    latitude  = lat, 
+    date,
+    day = dd,
+    month = mm,
+    year, 
+    t2m,                 # Se quiser manter as variáveis, basta citar o nome delas
+    prectotcorr,
+    t2m_max,
+    t2m_min,
+    rh2m,
+    ws2m,
+    allsky_sfc_sw_dwn
+  )
+
+saveRDS(nasa_power, file = "data/data-set-nasapower.rds")
+```
+
+
+
