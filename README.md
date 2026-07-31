@@ -93,7 +93,7 @@ ds_xco2 |>
   geom_point(shape=21,color="black",fill="gray") +
   geom_smooth(method = "lm",
               color = "red", linetype = "dashed",
-              size=1) +
+              linewidth=1) +
   stat_regline_equation(aes(
   label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) +
   theme_bw() +
@@ -137,7 +137,8 @@ ds_xco2 <- ds_xco2 |>
   ungroup()
 ```
 
-``` r
+<!--
+&#10;``` r
 ds_xco2 |> 
   mutate(
     # Ajustado para traduzir P1, P2 e P3
@@ -157,7 +158,7 @@ ds_xco2 |>
   labs(
     x = expression(paste(X[CO2]," (ppm)")),
     y = "Anos"
-  ) +
+  ) + xlim(375,400) +
   theme(
     axis.title.x = element_text(hjust = 0.5, face = "bold"),
     axis.title.y = element_text(hjust = 0.5, face = "bold"),
@@ -166,6 +167,7 @@ ds_xco2 |>
     legend.text = element_text(size = 9)
   )
 ```
+-->
 
 ``` r
 ds_xco2 |>
@@ -178,7 +180,7 @@ ds_xco2 |>
     SKW     = agricolae::skewness(xco2),
     KRT     = agricolae::kurtosis(xco2)
   ) |>
-  writexl::write_xlsx("../output/estat-desc.xlsx") # Ajustado para .xlsx
+  writexl::write_xlsx("output/estat-desc.xlsx") # Ajustado para .xlsx
 
 ds_xco2 |>
   group_by(epoch, season) |> 
@@ -273,7 +275,7 @@ ds_xco2 |>
 
 ``` r
 ds_xco2 |>
-  group_by(quarter_year) |>
+  group_by(four_month_period) |>
   summarise(
     N       = length(xco2_anomaly),
     MEAN    = mean(xco2_anomaly, na.rm = TRUE),
@@ -282,7 +284,7 @@ ds_xco2 |>
     SKW     = agricolae::skewness(xco2_anomaly),
     KRT     = agricolae::kurtosis(xco2_anomaly) # Vírgula extra removida aqui
   ) |>
-  writexl::write_xlsx("../output/estat-desc-anomaly.xls")
+  writexl::write_xlsx("output/estat-desc-anomaly.xlsx")
 
 ds_xco2 |>
   # Agrupa por ano (epoch) e trimestre (season)
@@ -308,3 +310,31 @@ ds_xco2 |>
   # Transição para 4 cores usando a paleta Mako de forma elegante
   scale_fill_viridis_d(option = "mako")
 ```
+
+``` r
+ds_xco2 |> 
+  sample_n(10000) |> 
+  mutate(
+    grupo = ifelse(year <= 2019, 1,2)
+  ) |> 
+  group_by(grupo, longitude, latitude) |> 
+  summarise(
+    xco2_anomaly_median = median(xco2_anomaly, na.rm = TRUE)
+  ) |> 
+  ggplot(
+    aes(longitude,latitude,color = xco2_anomaly_median)
+  ) + 
+  geom_point() +
+  facet_wrap(~grupo, ncol=1)
+  
+```
+
+## Carregar os dados de GOSAT - 1
+
+### Calcular anomalia
+
+## Carregar os dados de GOSAT - 2
+
+## Calcular anomalia
+
+## plots e análise de consistência, ou seja, existem diferenças nos boxplots?
