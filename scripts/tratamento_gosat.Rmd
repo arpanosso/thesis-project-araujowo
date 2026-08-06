@@ -148,34 +148,39 @@ library(ggplot2)
 ```{r}
 ## Recorte da Amazônia Legal
 
-# amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
-# amazon_shp <- st_transform(amazon_shp, 4326)
-# 
-# df_gosat2_br <- readRDS("../data-raw/df_gosat2_br.rds") |> 
-#   filter(year == 2022)
-# 
-# df_gosat2_br <- st_as_sf(df_gosat2_br,
-#                          coords = c("longitude", "latitude"),
-#                          crs = 4326,
-#                          remove = FALSE)
-# 
-# df_gosat2_amazon <- st_filter(df_gosat2_br, amazon_shp)
-# View(df_gosat2_amazon)
+amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
+amazon_shp <- st_transform(amazon_shp, 4326)
 
-# ## Visualizando 
-# ggplot() +
-#   geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
-#   geom_sf(data = df_gosat2_amazon, aes(color = xch4), size = 1.5, alpha = 0.7) +
-#   scale_color_viridis_c(option = "plasma", name = "XCH4 (ppb)") +
-#   theme_minimal() +
-#   labs(
-#     title = "Monitoramento de Metano na Área de Estudo",
-#     subtitle = paste("Total de observações:", nrow(df_gosat2_amazon)),
-#     x = "Longitude", 
-#     y = "Latitude"
-#   )
+df_gosat2_br <- readRDS("../data-raw/df_gosat2_br.rds")
 
-## saveRDS(df_gosat2_amazon, "../data/data-set-gosat2.rds")
+df_gosat2_br <- st_as_sf(df_gosat2_br,
+                         coords = c("longitude", "latitude"),
+                         crs = 4326,
+                         remove = FALSE)
+
+df_gosat2_amazon <- st_filter(df_gosat2_br, amazon_shp)
+#View(df_gosat2_amazon)
+
+test_g2 <- df_gosat2_amazon |>
+  filter(xco2_quality_flag == 0) |> 
+  sf::st_drop_geometry() |> 
+  as_tibble()
+
+## Visualizando
+ggplot() +
+  geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
+  geom_point(data = test_g2, aes(x = longitude, y = latitude, color = xco2), 
+             size = 1.5, alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma", name = expression(paste(X[CO2], " (ppm)"))) +
+  theme_minimal() +
+  labs(
+    title = "XCO2 na Área de Estudo",
+    subtitle = paste("Total de observações:", nrow(test_g2)),
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+saveRDS(test_g2, "../data/data-set-gosat2.rds")
 ```
 
 

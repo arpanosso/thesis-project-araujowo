@@ -46,7 +46,7 @@ da terra.
 - **Aquisição e download dos dados brutos**
   - [OCO-2 e OCO-3](https://disc.gsfc.nasa.gov)
 
-## Acesso aos dados - [LINK](https://1drv.ms/f/c/dc7e0de32596e1dd/IgA4a4pLTT4CT4hSyFysPgNyAa8htfE6IFdvflDgbR551Z0?e=E7FF9z)
+### Acesso aos dados - [LINK](https://1drv.ms/f/c/dc7e0de32596e1dd/IgA4a4pLTT4CT4hSyFysPgNyAa8htfE6IFdvflDgbR551Z0?e=E7FF9z)
 
 ### Carregando pacotes
 
@@ -62,17 +62,18 @@ library(ggplot2)
 #source("../R/my-function.R")
 ```
 
+### Analisando XCO2 - OCO2 e OCO3 - NASA
+
 ``` r
 # Carregando os dados de xco2
 
 ds_xco2 <- readr::read_rds("data/data-set-xco2.rds")
 ```
 
-### Existe uma tendência regional nos dados, e ela deve ser retirada para esse trabalho.
-
 - Análise de regressão linear simples para caracterização da tendência:
 
 ``` r
+# ajustando um modelo de regressão linear simples
 mod_trend_xco2 <- lm(xco2 ~ year, 
           data = ds_xco2 |> 
             filter(xco2_quality_flag == 0) |> 
@@ -84,6 +85,7 @@ sm <- summary.lm(mod_trend_xco2)
 ```
 
 ``` r
+# Plotando o grafico de dispersão
 ds_xco2 |>
   #sample_n(1000) |>
   drop_na() |>
@@ -97,222 +99,221 @@ ds_xco2 |>
   stat_regline_equation(aes(
   label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) +
   theme_bw() +
-  labs(x="Data",y=expression(paste(X[CO2]," (ppm)"))) +
+  labs(x="year",y=expression(paste(X[CO2]," (ppm)"))) +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y")
 ```
+
+- Existe uma tendência regional nos dados, e ela deve ser retirada para
+  esse trabalho.
 
 ``` r
 a_co2 <- mod_trend_xco2$coefficients[[1]]
 b_co2 <- mod_trend_xco2$coefficients[[2]]
 
-ds_xco2 <- ds_xco2 |>
-  filter(xco2_quality_flag == 0,
-         year >= 2015 & year <= 2024) |> 
+ds_xco2_quarter <- ds_xco2 |>
   mutate(
     year_modif = year - min(year),
     xco2_est = a_co2 + b_co2 * year_modif,
     delta = xco2_est - xco2,
     xco2_detrend = (a_co2 - delta) - (mean(xco2) - a_co2)
   ) |> 
-  select(-c(xco2_quality_flag, xco2_incerteza, year_modif:delta,
+  select(-c( xco2_incerteza, year_modif:delta,
             flag_amazon, flag_para, flag_amazonas)) |> 
   rename(xco2_trend = xco2,
          xco2 = xco2_detrend) |> 
   mutate(
-    # 1. Define a sigla do quadrimestre com base no mês
-    period = case_when(
-      month %in% c(12, 1, 2, 3)  ~ "P1",
-      month %in% c(4, 5, 6, 7)   ~ "P2",
-      month %in% c(8, 9, 10, 11) ~ "P3"
+    # 1. Define o quarter com base no número do mês
+    quarter = case_when(
+      month %in% c(1, 2, 3)  ~ "Q1",
+      month %in% c(4, 5, 6)  ~ "Q2",
+      month %in% c(7, 8, 9)  ~ "Q3",
+      month %in% c(10, 11, 12) ~ "Q4"
     ),
-    
-    # 2. Cria a combinação Ano-Quadrimestre
-    four_month_period = paste0(year, "-", period),
-    
-    # 3. Mantém a compatibilidade para os gráficos
-    epoch = as.character(year),
-    season = period  # Recebe P1, P2 ou P3
-  ) |> 
+    quarter_year = paste0(year, "-", quarter),
+    epoch = as.character(year)
+    ) |> 
+  
+  # Garante que os dados estejam ordenados cronologicamente
   arrange(year, month) |> 
   ungroup()
 ```
 
-<!--
-&#10;``` r
-ds_xco2 |> 
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 sem tendencia
+ds_xco2_quarter |> 
   mutate(
-    # Ajustado para traduzir P1, P2 e P3
-    season = case_when(
-      season == "P1" ~ "1º Quadrimestre (Dez-Mar)",
-      season == "P2" ~ "2º Quadrimestre (Abr-Jul)",
-      season == "P3" ~ "3º Quadrimestre (Ago-Nov)"
+    quarter = case_when(
+      quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
     )
   ) |> 
   ggplot(aes(y = epoch)) +
-  geom_density_ridges(rel_min_height = 0.01,
-                      aes(x = xco2, fill = season),
-                      alpha = 0.6, color = "black",
-                      scale = 1.2) + 
-  scale_fill_viridis_d(option = "viridis", name = "Período:") +
-  theme_ridges() +
-  labs(
-    x = expression(paste(X[CO2]," (ppm)")),
-    y = "Anos"
-  ) + xlim(375,400) +
-  theme(
-    axis.title.x = element_text(hjust = 0.5, face = "bold"),
-    axis.title.y = element_text(hjust = 0.5, face = "bold"),
-    legend.position = "top",
-    legend.justification = "center",
-    legend.text = element_text(size = 9)
-  )
-```
--->
-
-``` r
-ds_xco2 |>
-  group_by(four_month_period) |> # Atualizado de quarter_year para four_month_period
-  summarise(
-    N       = length(xco2),
-    MEAN    = mean(xco2, na.rm = TRUE),
-    MEDIAN  = median(xco2, na.rm = TRUE),
-    STD_DV  = sd(xco2, na.rm = TRUE),
-    SKW     = agricolae::skewness(xco2),
-    KRT     = agricolae::kurtosis(xco2)
-  ) |>
-  writexl::write_xlsx("output/estat-desc.xlsx") # Ajustado para .xlsx
-
-ds_xco2 |>
-  group_by(epoch, season) |> 
-  ggplot(aes(x = epoch, y = xco2, fill = season)) +
-  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
-  coord_cartesian(ylim = c(350, 410)) + 
-  theme_bw() +
-  theme(
-    legend.position = "bottom",
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  ) +
-  labs(
-    x = "Anos",
-    y = expression(paste(X[CO2]," (ppm)")),
-    fill = "Quadrimestre:"
-  ) +
-  scale_fill_viridis_d(option = "mako")
-```
-
-``` r
-ds_xco2 <- ds_xco2 |> 
-  # 1. Agrupamos por data para fazer a validação diária
-  group_by(date) |> 
-  mutate(
-    # Conta quantas observações válidas existem naquele dia específico
-    n_obs_dia = sum(!is.na(xco2)),
-    
-    # Calcula a mediana do dia apenas se existirem 5 ou mais observações
-    mediana_diaria = ifelse(n_obs_dia >= 5, median(xco2, na.rm = TRUE), NA),
-    
-    # Anomalia = Valor do Pixel - Mediana Regional do Dia
-    xco2_anomaly = ifelse(n_obs_dia >= 5, xco2 - mediana_diaria, NA)
-  ) |> 
-  # 2. Desagrupa para manter o banco limpo
-  ungroup()
-
-# ==============================================================================
-# VERIFICAÇÃO DO RESULTADO
-# ==============================================================================
-
-# Quantos dias passaram no critério de ter pelo menos 5 observações?
-dias_validos <- ds_xco2 |> 
-  filter(!is.na(xco2_anomaly)) |> 
-  distinct(date) |> 
-  nrow()
-
-cat("Total de dias com dados de anomalia calculados (mínimo 5 obs):", dias_validos, "\n")
-
-# Olhando o topo do banco de dados para conferir as novas colunas
-ds_xco2 |> 
-  select(date, latitude, longitude, xco2, n_obs_dia, mediana_diaria, xco2_anomaly) |> 
-  head(10)
-```
-
-``` r
-ds_xco2 |> 
-  filter(!is.na(xco2_anomaly), !is.na(season)) |> 
-  mutate(
-    # Tradução e rotulagem clara para os 3 quadrimestres
-    season = case_when(
-      season == "P1" ~ "1º Quadrimestre (Dez-Mar)",
-      season == "P2" ~ "2º Quadrimestre (Abr-Jul)",
-      season == "P3" ~ "3º Quadrimestre (Ago-Nov)"
-    )
-  ) |> 
-  ggplot(aes(y = epoch)) +
-  # Montanhas de densidade estilhada para as anomalias
   geom_density_ridges(
     rel_min_height = 0.01,
-    aes(x = xco2_anomaly, fill = season),
+    aes(x = xco2, fill = quarter),
     alpha = 0.6, 
     color = "black",
     scale = 1.2
   ) + 
-  
-  # Paleta viridis adaptada para 3 categorias
-  scale_fill_viridis_d(option = "viridis", name = "Período:") +
-  
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
   theme_ridges() +
   labs(
-    x = expression(paste(X[CO2], " - Anomalia Diária (ppm)")),
-    y = "Anos"
-  ) +
+    x = expression(paste(X[CO2], " (ppm)")),
+    y = "year"
+  ) + 
+  xlim(375, 395) +
   theme(
-    axis.title.x = element_text(hjust = 0.5, face = "bold"),
-    axis.title.y = element_text(hjust = 0.5, face = "bold"),
-    legend.position = "top",
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
     legend.justification = "center",
-    legend.text = element_text(size = 9)
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
   )
 ```
 
 ``` r
-ds_xco2 |>
-  group_by(four_month_period) |>
-  summarise(
-    N       = length(xco2_anomaly),
-    MEAN    = mean(xco2_anomaly, na.rm = TRUE),
-    MEDIAN  = median(xco2_anomaly, na.rm = TRUE),
-    STD_DV  = sd(xco2_anomaly, na.rm = TRUE),
-    SKW     = agricolae::skewness(xco2_anomaly),
-    KRT     = agricolae::kurtosis(xco2_anomaly) # Vírgula extra removida aqui
-  ) |>
-  writexl::write_xlsx("output/estat-desc-anomaly.xlsx")
-
-ds_xco2 |>
-  # Agrupa por ano (epoch) e trimestre (season)
-  group_by(epoch, season) |> 
-  ggplot(aes(x = epoch, y = xco2_anomaly, fill = season)) +
-  # O boxplot vai separar os 4 trimestres lado a lado dentro de cada ano
+# ## Estatística Descritiva - XCO2
+# # ds_xco2_quarter |>
+# #   group_by(quarter_year) |>
+# #   summarise(
+# #     N       = length(xco2),
+# #     MIN     = min(xco2, na.rm = TRUE),    
+# #     MAX     = max(xco2, na.rm = TRUE),    
+# #     MEAN    = mean(xco2, na.rm = TRUE),
+# #     MEDIAN  = median(xco2, na.rm = TRUE),
+# #     STD_DV  = sd(xco2, na.rm = TRUE),
+# #     SKW     = agricolae::skewness(xco2),
+# #     KRT     = agricolae::kurtosis(xco2)
+# #   ) |>
+# #   
+# #   writexl::write_xlsx("output/estat-desc.xlsx") #Salvando
+# 
+# ## Boxplot
+ds_xco2_quarter |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2, fill = quarter)) +
   geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
-  
-  # Mantendo o zoom na região dos seus dados transformados (detrended)
-  # Dica: se notar que as caixas sumiram, ajuste esses valores para acompanhar a média do detrend
-  #coord_cartesian(ylim = c(350, 410)) + 
-  
+  coord_cartesian(ylim = c(360, 400)) + 
   theme_bw() +
   theme(
     legend.position = "bottom",
-    axis.text.x = element_text(angle = 45, hjust = 1) # Inclina os anos para não encavalar
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
   ) +
   labs(
-    x = "Anos",
-    y = expression(paste(X[CO2],"anomaly")),
-    fill = "Trimestre:"
+    x = "year",
+    y = expression(paste(X[CO2], " (ppm)")),
+    fill = "quarter:"
   ) +
-  # Transição para 4 cores usando a paleta Mako de forma elegante
+  scale_fill_viridis_d(option = "mako")
+```
+
+- Calculando a anomalia diária do XCO2.
+
+O cálculo de anomalias diárias
+($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em
+consideração para garantir o rigor estatístico e evitar distorções na
+mediana provocadas por dias com baixa densidade de amostragem orbital,
+um critério de validação mínima de 5 observações diárias.
+
+``` r
+# ds_xco2_anomal <- ds_xco2_quarter |>
+#   # 1. Agrupamos por data para fazer a validação diária
+#   group_by(date) |>
+#   mutate(
+#     n_obs_day = sum(!is.na(xco2)),
+#     median_day = ifelse(n_obs_day >= 5, median(xco2, na.rm = TRUE), NA),
+#     xco2_anomaly = ifelse(n_obs_day >= 5, xco2 - median_day, NA)
+#   ) |>
+#   # 2. Desagrupa para manter o banco limpo
+#   ungroup()
+# #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal.rds")
+```
+
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal.rds") 
+ds_xco2_anomal|> 
+  filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
+  mutate(
+    quarter = case_when(
+       quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
+    )
+  ) |> 
+  ggplot(aes(y = epoch)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    aes(x = xco2_anomaly, fill = quarter),
+    alpha = 0.6, 
+    color = "black",
+    scale = 1.2
+  ) + 
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
+  theme_ridges() +
+  labs(
+    x = expression(paste(X[CO2], " anomaly (ppm)")),
+    y = "Year"
+  ) + 
+  xlim(-8, 8) +
+  theme(
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
+    legend.justification = "center",
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
+  )
+```
+
+``` r
+# ## Estatística Descritiva - XCO2 anomaly
+# ds_xco2_anomal |>
+#   group_by(quarter_year) |>
+#   summarise(
+#     N       = length(xco2_anomaly),
+#     MIN     = min(xco2_anomaly, na.rm = TRUE),
+#     MAX     = max(xco2_anomaly, na.rm = TRUE),
+#     MEAN    = mean(xco2_anomaly, na.rm = TRUE),
+#     MEDIAN  = median(xco2_anomaly, na.rm = TRUE),
+#     STD_DV  = sd(xco2_anomaly, na.rm = TRUE),
+#     SKW     = agricolae::skewness(xco2_anomaly),
+#     KRT     = agricolae::kurtosis(xco2_anomaly)
+#   ) |>
+#   ##writexl::write_xlsx("output/estat-desc-anomaly.xlsx")
+
+
+# ## Boxplot
+ds_xco2_anomal |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2_anomaly, fill = quarter)) +
+  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Year",
+    y = expression(paste(X[CO2]," anomaly (ppm)")),
+    fill = "quarter:"
+  ) +
   scale_fill_viridis_d(option = "mako")
 ```
 
 ``` r
-ds_xco2 |> 
+# Plotando o XCO2 antes 2019 e após 2019
+ds_xco2_anomal |> 
   sample_n(10000) |> 
   mutate(
     grupo = ifelse(year <= 2019, 1,2)
@@ -329,12 +330,488 @@ ds_xco2 |>
   
 ```
 
-## Carregar os dados de GOSAT - 1
+### Analisando XCO2 - GOSAT1 e GOSAT2
 
-### Calcular anomalia
+- Carregando os dados do GOSAT - 1
 
-## Carregar os dados de GOSAT - 2
+``` r
+xco2_gosat1 <- readr::read_rds("data/data-set-gosat1.rds")
+```
 
-## Calcular anomalia
+``` r
+# ajustando um modelo de regressão linear simples
+mod_trend_xco2 <- lm(xco2 ~ year, 
+          data = xco2_gosat1 |> 
+            drop_na() |> 
+            mutate( year = year - min(year)) 
+          )
+# mod_trend_xco2
+sm <- summary.lm(mod_trend_xco2)
+```
 
-## plots e análise de consistência, ou seja, existem diferenças nos boxplots?
+``` r
+# Plotando o grafico de dispersão
+
+xco2_gosat1 |>
+  #sample_n(1000) |>
+  drop_na() |>
+  mutate( year = year - min(year)) |>
+  ggplot(aes(x=date, y=xco2)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_point(shape=21,color="black",fill="gray") +
+  geom_smooth(method = "lm",
+              color = "red", linetype = "dashed",
+              linewidth=1) +
+  stat_regline_equation(aes(
+  label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) +
+  theme_bw() +
+  labs(x="year",y=expression(paste(X[CO2]," (ppm)"))) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y")
+```
+
+- Existe uma tendência regional nos dados, e ela deve ser retirada para
+  esse trabalho.
+
+``` r
+a_co2 <- mod_trend_xco2$coefficients[[1]]
+b_co2 <- mod_trend_xco2$coefficients[[2]]
+
+ds_xco2_quarter <- xco2_gosat1 |>
+  mutate(
+    year_modif = year - min(year),
+    xco2_est = a_co2 + b_co2 * year_modif,
+    delta = xco2_est - xco2,
+    xco2_detrend = (a_co2 - delta) - (mean(xco2) - a_co2)
+  ) |> 
+  rename(xco2_trend = xco2,
+         xco2 = xco2_detrend) |> 
+  mutate(
+    # 1. Define o quarter com base no número do mês
+    quarter = case_when(
+      month %in% c(1, 2, 3)  ~ "Q1",
+      month %in% c(4, 5, 6)  ~ "Q2",
+      month %in% c(7, 8, 9)  ~ "Q3",
+      month %in% c(10, 11, 12) ~ "Q4"
+    ),
+    quarter_year = paste0(year, "-", quarter),
+    epoch = as.character(year)
+    ) |> 
+  
+  # Garante que os dados estejam ordenados cronologicamente
+  arrange(year, month) |> 
+  ungroup()
+```
+
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 sem tendencia
+ds_xco2_quarter |> 
+  mutate(
+    quarter = case_when(
+      quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
+    )
+  ) |> 
+  ggplot(aes(y = epoch)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    aes(x = xco2, fill = quarter),
+    alpha = 0.6, 
+    color = "black",
+    scale = 1.2
+  ) + 
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
+  theme_ridges() +
+  labs(
+    x = expression(paste(X[CO2], " (ppm)")),
+    y = "year"
+  ) + 
+  xlim(375, 405) +
+  theme(
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
+    legend.justification = "center",
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
+  )
+```
+
+``` r
+# # Estatística Descritiva - XCO2
+# ds_xco2_quarter |>
+#   group_by(quarter_year) |>
+#   summarise(
+#     N       = length(xco2),
+#     MIN     = min(xco2, na.rm = TRUE),
+#     MAX     = max(xco2, na.rm = TRUE),
+#     MEAN    = mean(xco2, na.rm = TRUE),
+#     MEDIAN  = median(xco2, na.rm = TRUE),
+#     STD_DV  = sd(xco2, na.rm = TRUE),
+#     SKW     = agricolae::skewness(xco2),
+#     KRT     = agricolae::kurtosis(xco2)
+#   ) |>
+# # writexl::write_xlsx("output/estat-desc-xco2-gosat1.xlsx") #Salvando
+
+## Boxplot
+ds_xco2_quarter |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2, fill = quarter)) +
+  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
+  coord_cartesian(ylim = c(370, 405)) + 
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Year",
+    y = expression(paste(X[CO2], " (ppm)")),
+    fill = "quarter:"
+  ) +
+  scale_fill_viridis_d(option = "mako")
+```
+
+- Calculando a anomalia diária do XCO2 - GOSAT 1.
+
+O cálculo de anomalias diárias
+($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em
+consideração para garantir o rigor estatístico e evitar distorções na
+mediana provocadas por dias com baixa densidade de amostragem orbital,
+um critério de validação mínima de 5 observações diárias.
+
+``` r
+# ds_xco2_anomal <- ds_xco2_quarter |>
+#   # 1. Agrupamos por data para fazer a validação diária
+#   group_by(date) |>
+#   mutate(
+#     n_obs_day = sum(!is.na(xco2)),
+#     median_day = ifelse(n_obs_day >= 5, median(xco2, na.rm = TRUE), NA),
+#     xco2_anomaly = ifelse(n_obs_day >= 5, xco2 - median_day, NA)
+#   ) |>
+#   # 2. Desagrupa para manter o banco limpo
+#   ungroup()
+# #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal-gosat1.rds")
+```
+
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal |> 
+  filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
+  mutate(
+    quarter = case_when(
+      quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
+    )
+  ) |> 
+  ggplot(aes(y = epoch)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    aes(x = xco2_anomaly, fill = quarter),
+    alpha = 0.6, 
+    color = "black",
+    scale = 1.2
+  ) + 
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
+  theme_ridges() +
+  labs(
+    x = expression(paste(X[CO2], " anomaly (ppm)")),
+    y = "year"
+  ) + 
+  xlim(-8, 8) +
+  theme(
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
+    legend.justification = "center",
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
+  )
+```
+
+``` r
+# ## Estatística Descritiva - XCO2 anomaly
+# ds_xco2_anomal |>
+#   group_by(quarter_year) |>
+#   summarise(
+#     N       = length(xco2_anomaly),
+#     MIN     = min(xco2_anomaly, na.rm = TRUE),
+#     MAX     = max(xco2_anomaly, na.rm = TRUE),
+#     MEAN    = mean(xco2_anomaly, na.rm = TRUE),
+#     MEDIAN  = median(xco2_anomaly, na.rm = TRUE),
+#     STD_DV  = sd(xco2_anomaly, na.rm = TRUE),
+#     SKW     = agricolae::skewness(xco2_anomaly),
+#     KRT     = agricolae::kurtosis(xco2_anomaly)
+#   ) |>
+# #writexl::write_xlsx("output/estat-desc-anomaly-gosat1.xlsx")
+
+
+## Boxplot
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat1.rds")
+
+ds_xco2_anomal |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2_anomaly, fill = quarter)) +
+  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Year",
+    y = expression(paste(X[CO2],"anomaly (ppm)")),
+    fill = "quarter:"
+  ) +
+  scale_fill_viridis_d(option = "mako")
+```
+
+- Carregando os dados do GOSAT - 2
+
+``` r
+xco2_gosat2 <- readr::read_rds("data/data-set-gosat2.rds")
+```
+
+``` r
+# ajustando um modelo de regressão linear simples
+mod_trend_xco2 <- lm(xco2 ~ year, 
+          data = xco2_gosat2 |> 
+            drop_na() |> 
+            mutate( year = year - min(year)) 
+          )
+mod_trend_xco2
+sm <- summary.lm(mod_trend_xco2)
+```
+
+``` r
+# Plotando o grafico de dispersão
+
+xco2_gosat2 |>
+  #sample_n(1000) |>
+  drop_na() |>
+  mutate( year = year - min(year)) |>
+  ggplot(aes(x=date, y=xco2)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_point(shape=21,color="black",fill="gray") +
+  geom_smooth(method = "lm",
+              color = "red", linetype = "dashed",
+              linewidth=1) +
+  stat_regline_equation(aes(
+  label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) +
+  theme_bw() +
+  labs(x="year",y=expression(paste(X[CO2]," (ppm)"))) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y")
+```
+
+- Existe uma tendência regional nos dados, e ela deve ser retirada para
+  esse trabalho.
+
+``` r
+a_co2 <- mod_trend_xco2$coefficients[[1]]
+b_co2 <- mod_trend_xco2$coefficients[[2]]
+
+ds_xco2_quarter <- xco2_gosat2 |>
+  mutate(
+    year_modif = year - min(year),
+    xco2_est = a_co2 + b_co2 * year_modif,
+    delta = xco2_est - xco2,
+    xco2_detrend = (a_co2 - delta) - (mean(xco2) - a_co2)
+  ) |> 
+  rename(xco2_trend = xco2,
+         xco2 = xco2_detrend) |> 
+  mutate(
+    # 1. Define o quarter com base no número do mês
+    quarter = case_when(
+      month %in% c(1, 2, 3)  ~ "Q1",
+      month %in% c(4, 5, 6)  ~ "Q2",
+      month %in% c(7, 8, 9)  ~ "Q3",
+      month %in% c(10, 11, 12) ~ "Q4"
+    ),
+    quarter_year = paste0(year, "-", quarter),
+    epoch = as.character(year)
+    ) |> 
+  
+  # Garante que os dados estejam ordenados cronologicamente
+  arrange(year, month) |> 
+  ungroup()
+```
+
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 sem tendencia
+ds_xco2_quarter |> 
+  mutate(
+    quarter = case_when(
+      quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
+    )
+  ) |> 
+  ggplot(aes(y = epoch)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    aes(x = xco2, fill = quarter),
+    alpha = 0.6, 
+    color = "black",
+    scale = 1.2
+  ) + 
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
+  theme_ridges() +
+  labs(
+    x = expression(paste(X[CO2], " (ppm)")),
+    y = "Year"
+  ) + 
+  xlim(390, 420) +
+  theme(
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
+    legend.justification = "center",
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
+  )
+```
+
+``` r
+# # Estatística Descritiva - XCO2
+# ds_xco2_quarter |>
+#   group_by(quarter_year) |>
+#   summarise(
+#     N       = length(xco2),
+#     MIN     = min(xco2, na.rm = TRUE),
+#     MAX     = max(xco2, na.rm = TRUE),
+#     MEAN    = mean(xco2, na.rm = TRUE),
+#     MEDIAN  = median(xco2, na.rm = TRUE),
+#     STD_DV  = sd(xco2, na.rm = TRUE),
+#     SKW     = agricolae::skewness(xco2),
+#     KRT     = agricolae::kurtosis(xco2)
+#   ) |>
+# #writexl::write_xlsx("output/estat-desc-xco2-gosat2.xlsx") #Salvando
+
+## Boxplot
+ds_xco2_quarter |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2, fill = quarter)) +
+  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
+  coord_cartesian(ylim = c(390, 420)) + 
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Year",
+    y = expression(paste(X[CO2], " (ppm)")),
+    fill = "quarter:"
+  ) +
+  scale_fill_viridis_d(option = "mako")
+```
+
+- Calculando a anomalia diária do XCO2 - GOSAT 2.
+
+O cálculo de anomalias diárias
+($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em
+consideração para garantir o rigor estatístico e evitar distorções na
+mediana provocadas por dias com baixa densidade de amostragem orbital,
+um critério de validação mínima de 5 observações diárias.
+
+``` r
+# ds_xco2_anomal <- ds_xco2_quarter |>
+#   # 1. Agrupamos por data para fazer a validação diária
+#   group_by(date) |>
+#   mutate(
+#     n_obs_day = sum(!is.na(xco2)),
+#     median_day = ifelse(n_obs_day >= 5, median(xco2, na.rm = TRUE), NA),
+#     xco2_anomaly = ifelse(n_obs_day >= 5, xco2 - median_day, NA)
+#   ) |>
+#   # 2. Desagrupa para manter o banco limpo
+#   ungroup()
+# #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal-gosat2.rds")
+```
+
+``` r
+# Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal |> 
+  filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
+  mutate(
+    quarter = case_when(
+      quarter == "Q1" ~ "1º Q (Jan-Mar)",
+      quarter == "Q2" ~ "2º Q (Apr-Jun)",
+      quarter == "Q3" ~ "3º Q (Jul-Sep)",
+      quarter == "Q4" ~ "4º Q (Oct-Dec)"
+    )
+  ) |> 
+  ggplot(aes(y = epoch)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    aes(x = xco2_anomaly, fill = quarter),
+    alpha = 0.6, 
+    color = "black",
+    scale = 1.2
+  ) + 
+  scale_fill_viridis_d(option = "viridis", name = "Period:") +
+  theme_ridges() +
+  labs(
+    x = expression(paste(X[CO2], " anomaly (ppm)")),
+    y = "Year"
+  ) + 
+  xlim(-8, 8) +
+  theme(
+    axis.title.x = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y = element_text(hjust = 0.5, size = 12, face = "bold"),
+    legend.position = "bottom" ,
+    legend.justification = "center",
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 9, face = "bold")
+  )
+```
+
+``` r
+## Estatística Descritiva - XCO2 anomaly
+ds_xco2_anomal |>
+  group_by(quarter_year) |>
+  summarise(
+    N       = length(xco2_anomaly),
+    MIN     = min(xco2_anomaly, na.rm = TRUE),
+    MAX     = max(xco2_anomaly, na.rm = TRUE),
+    MEAN    = mean(xco2_anomaly, na.rm = TRUE),
+    MEDIAN  = median(xco2_anomaly, na.rm = TRUE),
+    STD_DV  = sd(xco2_anomaly, na.rm = TRUE),
+    SKW     = agricolae::skewness(xco2_anomaly),
+    KRT     = agricolae::kurtosis(xco2_anomaly)
+  ) |>
+writexl::write_xlsx("output/estat-desc-anomaly-gosat2.xlsx")
+
+
+## Boxplot
+ds_xco2_anomal |>
+  group_by(epoch, quarter) |> 
+  ggplot(aes(x = epoch, y = xco2_anomaly, fill = quarter)) +
+  geom_boxplot(outlier.alpha = 0.2, outlier.size = 1) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = "Year",
+    y = expression(paste(X[CO2],"anomaly (ppm)")),
+    fill = "quarter:"
+  ) +
+  scale_fill_viridis_d(option = "mako")
+```
