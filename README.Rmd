@@ -10,7 +10,7 @@ knitr::opts_chunk$set(
   message = FALSE,
   error = FALSE,
   warning = FALSE,
-  eval = FALSE,
+  # eval = FALSE,
   comment = "#>"
 )
 ```
@@ -207,7 +207,6 @@ ds_xco2_quarter |>
 
 O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em consideração para garantir o rigor estatístico e evitar distorções na mediana provocadas por dias com baixa densidade de amostragem orbital, um critério de validação mínima de 5 observações diárias.
 
-
 ```{r}
 # ds_xco2_anomal <- ds_xco2_quarter |>
 #   # 1. Agrupamos por data para fazer a validação diária
@@ -221,7 +220,6 @@ O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{m
 #   ungroup()
 # #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal.rds")
 ```
-
 
 ```{r}
 # Grafico de Densidade (Ridgeline) do XCO2 anomaly
@@ -299,7 +297,6 @@ ds_xco2_anomal |>
   scale_fill_viridis_d(option = "mako")
 ```
 
-
 ```{r}
 # Plotando o XCO2 antes 2019 e após 2019
 ds_xco2_anomal |> 
@@ -321,7 +318,7 @@ ds_xco2_anomal |>
 
 ### Analisando XCO2 - GOSAT1 e GOSAT2
 
--  Carregando os dados do GOSAT - 1
+-   Carregando os dados do GOSAT - 1
 
 ```{r}
 xco2_gosat1 <- readr::read_rds("data/data-set-gosat1.rds")
@@ -338,7 +335,6 @@ mod_trend_xco2 <- lm(xco2 ~ year,
 # mod_trend_xco2
 sm <- summary.lm(mod_trend_xco2)
 ```
-
 
 ```{r}
 # Plotando o grafico de dispersão
@@ -467,11 +463,9 @@ ds_xco2_quarter |>
   scale_fill_viridis_d(option = "mako")
 ```
 
-
 -   Calculando a anomalia diária do XCO2 - GOSAT 1.
 
 O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em consideração para garantir o rigor estatístico e evitar distorções na mediana provocadas por dias com baixa densidade de amostragem orbital, um critério de validação mínima de 5 observações diárias.
-
 
 ```{r}
 # ds_xco2_anomal <- ds_xco2_quarter |>
@@ -487,9 +481,9 @@ O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{m
 # #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal-gosat1.rds")
 ```
 
-
 ```{r}
 # Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat1.rds")
 ds_xco2_anomal |> 
   filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
   mutate(
@@ -543,8 +537,6 @@ ds_xco2_anomal |>
 
 
 ## Boxplot
-ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat1.rds")
-
 ds_xco2_anomal |>
   group_by(epoch, quarter) |> 
   ggplot(aes(x = epoch, y = xco2_anomaly, fill = quarter)) +
@@ -566,10 +558,8 @@ ds_xco2_anomal |>
 
 ```
 
+-   Carregando os dados do GOSAT - 2
 
-
-
--  Carregando os dados do GOSAT - 2
 ```{r}
 xco2_gosat2 <- readr::read_rds("data/data-set-gosat2.rds")
 ```
@@ -584,7 +574,6 @@ mod_trend_xco2 <- lm(xco2 ~ year,
 mod_trend_xco2
 sm <- summary.lm(mod_trend_xco2)
 ```
-
 
 ```{r}
 # Plotando o grafico de dispersão
@@ -713,11 +702,9 @@ ds_xco2_quarter |>
   scale_fill_viridis_d(option = "mako")
 ```
 
-
--   Calculando a anomalia diária do XCO2 - GOSAT 2.
+-   Calculando a anomalia diária do XCO2 - GOSAT 2
 
 O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em consideração para garantir o rigor estatístico e evitar distorções na mediana provocadas por dias com baixa densidade de amostragem orbital, um critério de validação mínima de 5 observações diárias.
-
 
 ```{r}
 # ds_xco2_anomal <- ds_xco2_quarter |>
@@ -733,9 +720,9 @@ O cálculo de anomalias diárias ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{m
 # #write_rds(ds_xco2_anomal, "data/data-set-xco2-anomal-gosat2.rds")
 ```
 
-
 ```{r}
 # Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat2.rds")
 ds_xco2_anomal |> 
   filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
   mutate(
@@ -809,15 +796,3 @@ ds_xco2_anomal |>
   scale_fill_viridis_d(option = "mako")
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-

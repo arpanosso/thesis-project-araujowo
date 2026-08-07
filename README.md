@@ -103,6 +103,8 @@ ds_xco2 |>
   scale_x_date(date_breaks = "1 year", date_labels = "%Y")
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
 - Existe uma tendência regional nos dados, e ela deve ser retirada para
   esse trabalho.
 
@@ -174,6 +176,8 @@ ds_xco2_quarter |>
   )
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
 ``` r
 # ## Estatística Descritiva - XCO2
 # # ds_xco2_quarter |>
@@ -212,6 +216,8 @@ ds_xco2_quarter |>
   ) +
   scale_fill_viridis_d(option = "mako")
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 - Calculando a anomalia diária do XCO2.
 
@@ -273,6 +279,8 @@ ds_xco2_anomal|>
   )
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
 ``` r
 # ## Estatística Descritiva - XCO2 anomaly
 # ds_xco2_anomal |>
@@ -311,6 +319,8 @@ ds_xco2_anomal |>
   scale_fill_viridis_d(option = "mako")
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
 ``` r
 # Plotando o XCO2 antes 2019 e após 2019
 ds_xco2_anomal |> 
@@ -327,8 +337,9 @@ ds_xco2_anomal |>
   ) + 
   geom_point() +
   facet_wrap(~grupo, ncol=1)
-  
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ### Analisando XCO2 - GOSAT1 e GOSAT2
 
@@ -368,6 +379,8 @@ xco2_gosat1 |>
   labs(x="year",y=expression(paste(X[CO2]," (ppm)"))) +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y")
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 - Existe uma tendência regional nos dados, e ela deve ser retirada para
   esse trabalho.
@@ -438,6 +451,8 @@ ds_xco2_quarter |>
   )
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+
 ``` r
 # # Estatística Descritiva - XCO2
 # ds_xco2_quarter |>
@@ -476,6 +491,8 @@ ds_xco2_quarter |>
   scale_fill_viridis_d(option = "mako")
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
 - Calculando a anomalia diária do XCO2 - GOSAT 1.
 
 O cálculo de anomalias diárias
@@ -500,6 +517,7 @@ um critério de validação mínima de 5 observações diárias.
 
 ``` r
 # Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat1.rds")
 ds_xco2_anomal |> 
   filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
   mutate(
@@ -535,6 +553,8 @@ ds_xco2_anomal |>
   )
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
 ``` r
 # ## Estatística Descritiva - XCO2 anomaly
 # ds_xco2_anomal |>
@@ -553,8 +573,6 @@ ds_xco2_anomal |>
 
 
 ## Boxplot
-ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat1.rds")
-
 ds_xco2_anomal |>
   group_by(epoch, quarter) |> 
   ggplot(aes(x = epoch, y = xco2_anomaly, fill = quarter)) +
@@ -575,6 +593,8 @@ ds_xco2_anomal |>
   scale_fill_viridis_d(option = "mako")
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
 - Carregando os dados do GOSAT - 2
 
 ``` r
@@ -589,6 +609,14 @@ mod_trend_xco2 <- lm(xco2 ~ year,
             mutate( year = year - min(year)) 
           )
 mod_trend_xco2
+#> 
+#> Call:
+#> lm(formula = xco2 ~ year, data = mutate(drop_na(xco2_gosat2), 
+#>     year = year - min(year)))
+#> 
+#> Coefficients:
+#> (Intercept)         year  
+#>     413.122        2.558
 sm <- summary.lm(mod_trend_xco2)
 ```
 
@@ -611,6 +639,8 @@ xco2_gosat2 |>
   labs(x="year",y=expression(paste(X[CO2]," (ppm)"))) +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y")
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 - Existe uma tendência regional nos dados, e ela deve ser retirada para
   esse trabalho.
@@ -681,6 +711,8 @@ ds_xco2_quarter |>
   )
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+
 ``` r
 # # Estatística Descritiva - XCO2
 # ds_xco2_quarter |>
@@ -719,7 +751,9 @@ ds_xco2_quarter |>
   scale_fill_viridis_d(option = "mako")
 ```
 
-- Calculando a anomalia diária do XCO2 - GOSAT 2.
+![](README_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+- Calculando a anomalia diária do XCO2 - GOSAT 2
 
 O cálculo de anomalias diárias
 ($X_{CO2_{anomaly}} = X_{CO2_{pixel}} - \text{median}_{day}$), levou em
@@ -743,6 +777,7 @@ um critério de validação mínima de 5 observações diárias.
 
 ``` r
 # Grafico de Densidade (Ridgeline) do XCO2 anomaly
+ds_xco2_anomal <- readRDS("data/data-set-xco2-anomal-gosat2.rds")
 ds_xco2_anomal |> 
   filter(!is.na(xco2_anomaly), !is.na(quarter)) |> 
   mutate(
@@ -777,6 +812,8 @@ ds_xco2_anomal |>
     legend.title = element_text(size = 9, face = "bold")
   )
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ``` r
 ## Estatística Descritiva - XCO2 anomaly
@@ -815,3 +852,5 @@ ds_xco2_anomal |>
   ) +
   scale_fill_viridis_d(option = "mako")
 ```
+
+![](README_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
