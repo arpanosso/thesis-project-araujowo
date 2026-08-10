@@ -1,0 +1,245 @@
+---
+title: "Agrupamento em Grid Regular - XCO2 (OCO-2/3 + GOSAT-1 + GOSAT-2)"
+subtitle: "Amazônia Legal | 2015-2024"
+output: github_document
+author: Witória de Oliveira Araujo
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  message = FALSE,
+  error = FALSE,
+  warning = FALSE,
+  # eval = FALSE,
+  comment = "#>"
+)
+```
+
+### Objetivo
+1. Padronizar e unir as 3 bases (variável de interesse: **XCO2**)
+2. Testar grids regulares de **0.25°, 0.50° e 1.0°**
+3. Agregar por **(célula x dia)**, exigindo mínimo de **5 observações/dia/célula**
+4. Calcular **média** e **mediana** por célula-dia e comparar robustez
+5. Comparar as 3 resoluções e apontar a mais adequada
+
+
+-   Pacotes
+```{r}
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(stringr)
+```
+
+
+-   Configuração
+Ajuste os caminhos dos arquivos e os nomes das colunas conforme os seus dados reais.
+Como a área de interesse (Amazônia Legal) já vem recortada nas 3 bases, não há
+filtro espacial adicional aqui — só padronização e filtro de qualidade.
+
+```{r}
+xco2_nasa   <- readRDS("../data/data-set-xco2.rds")    
+gosat1 <- readRDS("../data/data-set-gosat1.rds")
+gosat2 <- readRDS("../data/data-set-gosat2.rds")
+
+# Mapeamento de colunas -> ajuste conforme os nomes reais dos seus arquivos
+config_cols <- list(
+  xco2_nasa = list(
+    longitude = "longitude", latitude = "latitude", xco2 = "xco2", date = "date",
+    year = "year", month = "month", day = "day"),
+  gosat1 = list(
+    longitude = "longitude", latitude = "latitude", xco2 = "xco2", date = "date",
+    year = "year", month = "month", day = "day"),
+  gosat2 = list(
+    longitude = "longitude", latitude = "latitude", xco2 = "xco2", date = "date",
+    year = "year", month = "month", day = "day")
+)
+```
+
+
+```{r}
+# Leitura e padronização das bases
+padronizar_base <- function(df, cfg, nome_sensor) {
+  df_std <- df %>%
+    rename(
+      latitude  = !!cfg$latitude,
+      longitude = !!cfg$longitude,
+      xco2      = !!cfg$xco2,
+      date      = !!cfg$date
+    )
+
+  df_std <- df_std %>%
+    mutate(date = as_date(date), sensor = nome_sensor) %>%
+    select(latitude, longitude, xco2, date, sensor) %>%
+    filter(!is.na(latitude), !is.na(longitude), !is.na(xco2), !is.na(date))
+
+  return(df_std)
+}
+```
+
+
+```{r}
+## Ler e unir as bases
+base_xco2   <- padronizar_base(xco2_nasa, config_cols$xco2_nasa, "NASA")
+base_gosat1 <- padronizar_base(gosat1,    config_cols$gosat1,    "GOSAT1")
+base_gosat2 <- padronizar_base(gosat2,    config_cols$gosat2,    "GOSAT2")
+
+base_unificada <- bind_rows(base_xco2, base_gosat1, base_gosat2)
+
+cat("Total de observações unificadas:", nrow(base_unificada), "\n")
+cat("Período:", format(min(base_unificada$date)), "a", format(max(base_unificada$date)), "\n")
+table(base_unificada$sensor)
+```
+
+-   Construção do grid regular
+Atribuição de cada observação ao **centro** da célula do grid:
+
+```{r}
+atribuir_grid <- function(df, resolucao) {
+  df %>%
+    mutate(
+      grid_lon = floor(longitude / resolucao) * resolucao + resolucao / 2,
+      grid_lat = floor(latitude  / resolucao) * resolucao + resolucao / 2
+    )
+}
+```
+
+-   Função agregação por célula-dia (mínimo de 5 observações)
+
+```{r}
+agregar_grid <- function(df, resolucao, min_obs = 5) {
+
+  df_grid <- atribuir_grid(df, resolucao)
+
+  df_grid %>%
+    group_by(grid_lat, grid_lon, date) %>%
+    summarise(
+      n_obs   = n(),
+      media   = mean(xco2, na.rm = TRUE),
+      mediana = median(xco2, na.rm = TRUE),
+      dp      = sd(xco2, na.rm = TRUE),
+      iqr     = IQR(xco2, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    filter(n_obs >= min_obs) %>%
+    mutate(
+      cv_media  = dp / media,
+      resolucao = resolucao
+    )
+}
+```
+
+```{r}
+## Estabelecendo as resoluções do grid
+
+resolucoes <- c(0.25, 0.50, 1.00)
+resultados_grid <- map_dfr(resolucoes, ~agregar_grid(base_unificada, .x, min_obs = 5))
+```
+
+-   Comparação: Média vs. Mediana
+A ideia: quanto maior a dispersão relativa (`dp`, `iqr`) dentro da célula-dia,
+maior a chance de assimetria/outliers — nesse caso a **mediana** tende a ser
+mais robusta. Comparamos o quanto a média se afasta da mediana em cada
+célula-dia (indício de assimetria).
+
+```{r comparacao-media-mediana}
+comparacao_media_mediana <- resultados_grid %>%
+  mutate(
+    diff_media_mediana = abs(media - mediana),
+    diff_relativa       = diff_media_mediana / media
+  ) %>%
+  group_by(resolucao) %>%
+  summarise(
+    n_celulas_dia             = n(),
+    media_dp                  = mean(dp, na.rm = TRUE),
+    media_iqr                 = mean(iqr, na.rm = TRUE),
+    media_cv                  = mean(cv_media, na.rm = TRUE),
+    media_diff_rel            = mean(diff_relativa, na.rm = TRUE),
+    prop_celulas_assimetricas = mean(diff_relativa > 0.001, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+comparacao_media_mediana
+```
+
+**Regra de decisão:**
+
+- `media_diff_rel` muito pequena → média ≈ mediana, tanto faz usar
+- `prop_celulas_assimetricas` alta + `media_cv`/`media_iqr` altos → prefira a **mediana**
+  (mais robusta a outliers, comuns em XCO2 por contaminação residual de nuvem/aerossol)
+
+# Comparação entre resoluções (0.25 / 0.50 / 1.0)
+
+```{r}
+comparacao_resolucoes <- resultados_grid %>%
+  group_by(resolucao) %>%
+  summarise(
+    n_celulas_dia_validas = n(),
+    n_celulas_espaciais    = n_distinct(paste(grid_lat, grid_lon)),
+    obs_media_por_celula   = mean(n_obs, na.rm = TRUE),
+    dp_medio               = mean(dp, na.rm = TRUE),
+    iqr_medio              = mean(iqr, na.rm = TRUE),
+    cv_medio               = mean(cv_media, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(resolucao)
+
+comparacao_resolucoes
+```
+
+**Critérios de escolha:**
+
+- Maior `n_celulas_dia_validas` → mais dados aproveitados após o filtro de 5 obs
+- Menor `dp_medio` / `iqr_medio` / `cv_medio` → maior homogeneidade dentro da célula
+- Trade-off esperado: grids finos (0.25°) → mais homogêneos, mas perdem mais
+  células no filtro de mínimo de 5 obs; grids grossos (1.0°) → mais observações
+  por célula, porém maior variabilidade interna (mistura pontos mais heterogêneos)
+
+# Visualizações
+
+```{r plot-n-obs}
+ggplot(resultados_grid, aes(x = factor(resolucao), y = n_obs)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  labs(x = "Resolução do grid (graus)", y = "Nº de observações por célula-dia",
+       title = "Densidade amostral por resolução de grid") +
+  theme_minimal()
+```
+
+```{r plot-dp}
+ggplot(resultados_grid, aes(x = factor(resolucao), y = dp)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  labs(x = "Resolução do grid (graus)", y = "Desvio padrão do XCO2 na célula-dia",
+       title = "Variabilidade intra-célula por resolução") +
+  theme_minimal()
+```
+
+```{r plot-media-mediana}
+ggplot(resultados_grid, aes(x = media, y = mediana)) +
+  geom_point(alpha = 0.15) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  facet_wrap(~resolucao) +
+  labs(x = "Média (ppm)", y = "Mediana (ppm)",
+       title = "Média vs. Mediana por célula-dia, por resolução") +
+  theme_minimal()
+```
+
+# Exportação dos resultados
+
+```{r exportar}
+write_csv(resultados_grid, "resultados_grid_por_resolucao.csv")
+write_csv(comparacao_media_mediana, "comparacao_media_mediana.csv")
+write_csv(comparacao_resolucoes, "comparacao_resolucoes.csv")
+```
+
+# Conclusão
+
+Depois de rodar, avalie as tabelas `comparacao_resolucoes` e
+`comparacao_media_mediana` acima:
+
+- Escolha a **resolução** com melhor equilíbrio entre cobertura
+  (`n_celulas_dia_validas`) e homogeneidade (`dp_medio`/`iqr_medio` baixos)
+- Escolha **média ou mediana** com base na simetria/robustez observada
+  (`prop_celulas_assimetricas` e `media_diff_rel`)
