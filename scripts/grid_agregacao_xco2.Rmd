@@ -38,7 +38,7 @@ filtro espacial adicional aqui — só padronização e filtro de qualidade.
 ```{r}
 xco2_nasa   <- readRDS("../data/data-set-xco2.rds")   |>  filter(year <= 2024) 
 gosat1 <- readRDS("../data/data-set-gosat1.rds") |>  filter(year <= 2024) 
-gosat2 <- readRDS("../data/data-set-gosat2.rds")  |>  filter(year <= 2024) 
+gosat2 <- readRDS("../data/data-set-gosattest.rds")  |>  filter(year <= 2024) 
 ```
 
 
@@ -56,6 +56,8 @@ xco2_nasa |>
   group_by(longitude, latitude) |> 
   ggplot(aes(longitude, latitude)) + geom_point()
 ```
+
+
 ```{r}
 gosat1 |>
   # mutate( longitude = round(longitude, 2),
@@ -66,6 +68,11 @@ gosat1 |>
 ```
 
 ```{r}
+gosat2 <- gosat2 |> 
+  rename(
+    # xco2_erro = xco2,
+    xco2 = xco2_corrigido
+  )
 gosat2 |>
   # mutate( longitude = round(longitude, 2),
   #         latitude = round(latitude, 2)) |> 
@@ -357,9 +364,9 @@ ggplot(bias_mensal, aes(x = data, y = bias_medio)) +
 ## ------------------------------------------------------------
 ## 10) Exportar tabela final para inspeção/relatório
 ## ------------------------------------------------------------
-write.csv(grid_wide, "../output/grid_wide_gosat2_vs_oco.csv", row.names = FALSE)
-write.csv(resumo_por_ano, "../output/resumo_bias_por_ano.csv", row.names = FALSE)
-write.csv(resumo_por_estacao, "../output/resumo_bias_por_estacao.csv", row.names = FALSE)
+# write.csv(grid_wide, "../output/grid_wide_gosat2_vs_oco.csv", row.names = FALSE)
+# write.csv(resumo_por_ano, "../output/resumo_bias_por_ano.csv", row.names = FALSE)
+# write.csv(resumo_por_estacao, "../output/resumo_bias_por_estacao.csv", row.names = FALSE)
 
 ## ============================================================
 ## Próximo passo sugerido: cruzar diff_ppm com AOD / fração de

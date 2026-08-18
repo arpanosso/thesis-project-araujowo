@@ -58,169 +58,10 @@ library(sf)
 library(ggplot2)
 ```
 
-#### Faxina e Tratamento dos dados do GOSAT_2
-
-```{r}
-# ## Abrir um arquivo para ver os grupos e as variáveis a serem utilizados.
-# test <- ("../data-raw/GOSAT-2/2019/GOSAT2TFTS220190301_02SWFPV0220000018.h5")
-# structure <- h5ls(test)
-# str(structure)
-# View(structure)
-# 
-## Criando função para ler os arquivos .h5 e extrair as variáveis.
-# file_path <- "../data-raw/GOSAT-2/"
-# 
-# read_data <- function(file_path) {
-#   date <- tryCatch({
-#     latitude <- h5read(file_path, "/SoundingGeometry/latitude")
-#     longitude <- h5read(file_path, "/SoundingGeometry/longitude")
-#     height <- h5read(file_path, "/SoundingGeometry/height")
-#     startDate <- h5read(file_path, "/Metadata/startDate")
-#     endDate <- h5read(file_path, "/Metadata/endDate")
-#     xch4 <- h5read(file_path, "/RetrievalResult/xch4")
-#     xch4_quality_flag <- h5read(file_path, "/RetrievalResult/xch4_quality_flag")
-#     xco2 <- h5read(file_path, "/RetrievalResult/xco2")
-#     xco2_quality_flag <- h5read(file_path, "/RetrievalResult/xco2_quality_flag")
-#     xh2o <- h5read(file_path, "/RetrievalResult/xh2o")
-#     xh2o_quality_flag <- h5read(file_path, "/RetrievalResult/xh2o_quality_flag")
-#     xco <- h5read(file_path, "/RetrievalResult/xco")
-#     xco_quality_flag <- h5read(file_path, "/RetrievalResult/xco_quality_flag")
-# 
-#     # Criar um data.frame temporário com os dados deste arquivo
-#     df_temp <- data.frame(
-#       latitude = as.numeric(latitude),
-#       longitude = as.numeric(longitude),
-#       height = as.numeric(height),
-#       startDate = startDate,
-#       xch4 = as.numeric(xch4),
-#       xch4_quality_flag = as.numeric(xch4_quality_flag),
-#       xco2 = as.numeric(xco2),
-#       xco2_quality_flag = as.numeric(xco2_quality_flag),
-#       xh2o = as.numeric(xh2o_quality_flag),
-#       xh2o_quality_flag = as.numeric(xh2o_quality_flag),
-#       xco = as.numeric(xco),
-#       xco_quality_flag = as.numeric(xco_quality_flag)
-#     )
-# 
-#     df_temp <- df_temp |> 
-#       filter(
-#         latitude >= -35 & latitude <= 6,
-#         longitude >= -75 & longitude <= -33
-#       )
-#     
-#     return(df_temp)
-# 
-#   }, error = function(e) {
-#     message(paste("Erro ao ler o arquivo:", file_path))
-#     return(NULL)
-#   })
-# 
-#   return(date)
-# }
-```
-
-```{r}
-# ## Rodando a rotina para todos os arquivos
-# list_files <- list.files(file_path,
-#                              pattern = "\\.h5$",
-#                              full.names = TRUE,
-#                              recursive = TRUE)
-# 
-# df_gosat2 <- map_df(list_files, read_data)
-# 
-# print(df_gosat2)
-# summary(df_gosat2)
-# 
-# 
-# ## Corrigindo as datas do banco
-# df_gosat2 <- df_gosat2 |>
-#   mutate(
-#     date = as_date(startDate),
-#     year  = year(date),
-#     month = month(date),
-#     day   = day(date)
-#   )
-# summary(df_gosat2$year)
-# saveRDS(df_gosat2, "../data-raw/df_gosat2_br.rds")
-
-```
-
-```{r}
-## Recorte da Amazônia Legal
-
-amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
-amazon_shp <- st_transform(amazon_shp, 4326)
-
-df_gosat2_br <- readRDS("../data-raw/df_gosat2_br.rds")
-
-df_gosat2_br <- st_as_sf(df_gosat2_br,
-                         coords = c("longitude", "latitude"),
-                         crs = 4326,
-                         remove = FALSE)
-
-df_gosat2_amazon <- st_filter(df_gosat2_br, amazon_shp)
-#View(df_gosat2_amazon)
-
-test_g2 <- df_gosat2_amazon |>
-  filter(xco2_quality_flag == 0) |> 
-  sf::st_drop_geometry() |> 
-  as_tibble()
-
-## Visualizando
-ggplot() +
-  geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
-  geom_point(data = test_g2, aes(x = longitude, y = latitude, color = xco2), 
-             size = 1.5, alpha = 0.7) +
-  scale_color_viridis_c(option = "plasma", name = expression(paste(X[CO2], " (ppm)"))) +
-  theme_minimal() +
-  labs(
-    title = "XCO2 na Área de Estudo",
-    subtitle = paste("Total de observações:", nrow(test_g2)),
-    x = "Longitude",
-    y = "Latitude"
-  )
-
-saveRDS(test_g2, "../data/data-set-gosat2.rds")
-```
-
-
-```{r}
-# library(ggplot2)
-# library(maps)
-# 
-# # 1. Carregar o mapa-múndi básico
-# world_map <- map_data("world")
-# 
-# 
-# banco_final_ch4 <- df_gosat_world |> 
-#   filter(year == 2022)
-# 
-# # 2. Criar a visualização
-# ggplot() +
-#   # Camada do mapa-múndi (cinza claro para não ofuscar os pontos)
-#   geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
-#                fill = "#f2f2f2", color = "white", size = 0.1) +
-#   # Camada das visadas do satélite
-#   geom_point(data = banco_final_ch4, 
-#              aes(x = longitude, y = latitude, color = xh2o), 
-#              size = 0.1,    # Pontos bem pequenos para ver as faixas
-#              alpha = 0.4) + # Transparência para destacar sobreposições
-#   # Cores científicas para o Metano
-#   scale_color_viridis_c(option = "viridis", name = "XCH4") +
-#   # Ajustar a visão para o mapa inteiro
-#   coord_fixed(1.3) +
-#   theme_minimal() +
-#   labs(title = "Trajetórias Globais de Varredura - GOSAT",
-#        subtitle = "As linhas representam as órbitas de visada do sensor",
-#        x = "Longitude", y = "Latitude") +
-#   theme(legend.position = "bottom")
-```
-
-
 #### Faxina e Tratamento dos dados do GOSAT_1
 
 -   Os arquivos .tar consistem em pacotes mensais que contêm arquivos .h5 diários. Para otimizar o fluxo de trabalho, desenvolveremos uma rotina de extração automática desses arquivos para uma pasta única. Isso evita a necessidade de descompactação manual e a criação excessiva de subpastas redundantes.
--   Como cada variável possui um arquivo .tar, será preciso adaptar a rotina abaixo para a variável de interesse. 
+-   Como cada variável possui um arquivo .tar, será preciso adaptar a rotina abaixo para a variável de interesse.
 
 ```{r}
 # ## Abrir e extrair arquivos .tar
@@ -256,7 +97,6 @@ saveRDS(test_g2, "../data/data-set-gosat2.rds")
 # 
 # message("--- Concluído! Todos os arquivos .h5 estão em: ", h2o_h5, " ---")
 ```
-
 
 ```{r}
 # ## Abrir um arquivo para ver os grupos e as variáveis a serem utilizados.
@@ -346,7 +186,6 @@ saveRDS(test_g2, "../data/data-set-gosat2.rds")
 # # saveRDS(df_gosat1, "../data-raw/df_gosat1_br.rds")
 ```
 
-
 ```{r}
 # ## Recorte da Amazônia Legal
 # amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
@@ -377,4 +216,275 @@ saveRDS(test_g2, "../data/data-set-gosat2.rds")
 # 
 # # saveRDS(df_gosat1_amazon, "../data/data-set-gosat1.rds")
 ```
+
+#### Faxina e Tratamento dos Dados: GOSAT-2 (TANSO-FTS-2 SWIR L2 V02.xx)
+
+  Os dados brutos do GOSAT-2 apresentam concentrações médias de XCO2 e XCH4 superestimadas de até ~8 ppm (desalinhadas em relação ao GOSAT-1, OCO-2 e OCO-3) devido à ausência de correção prévia de viés.
+
+  Para assegurar a consistência dos dados, aplica-se a correção de viés (Bias Correction) diretamente no R, conforme a metodologia oficial do NIES. A literatura recomenda que a validação dos dados seja feita através da avaliação do viés residual comparando com algum dado independente disponível na região (como dados de torres de fluxo, ou comparação com OCO-2 que já é bem validado). Isso porque, a Amazônia tem albedo baixo e características muito distintas das estações TCCON usadas na calibração.
+
+Referência:
+
+    YOSHIDA, Yukio et al. Quality evaluation of the column-averaged dry air mole fractions of carbon dioxide and methane observed by GOSAT and GOSAT-2. **Sola**, v. 19, n. 1, p. 173-184, 2023.
+    
+    YANG, Yang et al. The Inter-comparison of GOSAT, GOSAT-2 and OCO-2/3 XCO2 Measurements over East Asia and Validated with TCCON Observations. 2025.
+
+Produto: TANSO-FTS-2 SWIR L2 V02.xx
+
+Equações de Correção:
+
+-   XCO2 (Eq. 1): XCO2_corr = XCO2 + A0 + A1*ΔPs + A2*AOT + A3\*fILS_SB2
+
+-   XCH4 (Eq. 2): XCH4_corr = XCH4 + B0 + B1*ΔPs + B2*AOT + B3\*fILS_SB5
+
+Algumas informações sobre as variáveis que iremos utilizar:
+
+Pressão superficial recuperada pelo algoritmo (unidade: hPa).
+
+Pressão superficial a priori (valor de referência usado como entrada, em hPa).
+
+Perfil de aerossóis tipo 1 por camada (15 camadas atmosféricas), Cada linha é um sounding, cada coluna é uma camada.
+
+Perfil de aerossóis tipo 2 por camada (15 camadas atmosféricas).
+
+Fator de stretch da função ILS (Instrumental Line Shape) para a subband 2. Essa variável representa distorções instrumentais na banda do CO2 fraco. A subband 2 corresponde à banda de 1.56-1.72 µm (CO2 fraco).
+
+```{r}
+## Abrir um arquivo para ver os grupos e as variáveis a serem utilizados.
+test <- ("../data-raw/GOSAT-2/2019/GOSAT2TFTS220190301_02SWFPV0220000018.h5")
+structure <- h5ls(test)
+str(structure)
+View(structure)
+
+# Criando função para ler os arquivos .h5 e extrair as variáveis.
+file_path <- "../data-raw/GOSAT-2/"
+
+read_data <- function(file_path) {
+  date <- tryCatch({
+    latitude <- h5read(file_path, "/SoundingGeometry/latitude")
+    longitude <- h5read(file_path, "/SoundingGeometry/longitude")
+    height <- h5read(file_path, "/SoundingGeometry/height")
+    tempo_raw <- h5read(file_path, "SoundingAttribute/observationTime")
+    xch4 <- h5read(file_path, "/RetrievalResult/xch4")
+    xch4_quality_flag <- h5read(file_path, "/RetrievalResult/xch4_quality_flag")
+    xch4_incert <- h5read(file_path, "RetrievalResult/xch4_uncert")
+    xco2 <- h5read(file_path, "/RetrievalResult/xco2")
+    xco2_quality_flag <- h5read(file_path, "/RetrievalResult/xco2_quality_flag")
+    xco2_incert <- h5read(file_path, "RetrievalResult/xco2_uncert")
+    xh2o <- h5read(file_path, "/RetrievalResult/xh2o")
+    xh2o_quality_flag <- h5read(file_path, "/RetrievalResult/xh2o_quality_flag")
+    pres_surface <- h5read(file_path, "RetrievalResult/surface_pressure")
+    pres_surf_apri <- h5read(file_path, "RetrievalResult/surface_pressure_apriori")
+    aod_t1 <- h5read(file_path, "RetrievalResult/aerosol_profile_type1")
+    aod_t2 <- h5read(file_path, "RetrievalResult/aerosol_profile_type2")
+    fILS_SB2 <- h5read(file_path, "RetrievalResult/ils_stretch_factor_subband02")
+    fILS_SB5 <- h5read(file_path, "RetrievalResult/ils_stretch_factor_subband05")
+    
+    # Tratamento de data
+    tempo <- as.POSIXct(tempo_raw, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC")
+    
+    # Somar as camadas de cada tipo de aerossol por sounding (colSums ao longo das linhas/camadas)
+    aod_t1_total <- colSums(aod_t1)
+    aod_t2_total <- colSums(aod_t2)
+    
+    # Criar um data.frame temporário com os dados deste arquivo
+    df_temp <- data.frame(
+      latitude = as.numeric(latitude),
+      longitude = as.numeric(longitude),
+      height = as.numeric(height),
+      date = tempo,
+      xch4 = as.numeric(xch4),
+      xch4_quality_flag = as.numeric(xch4_quality_flag),
+      xch4_incert = as.numeric(xch4_incert),
+      xco2 = as.numeric(xco2),
+      xco2_quality_flag = as.numeric(xco2_quality_flag),
+      xco2_incert = as.numeric(xco2_incert),
+      xh2o = as.numeric(xh2o),
+      xh2o_quality_flag = as.numeric(xh2o_quality_flag),
+      pres_surface = as.numeric(pres_surface),
+      pres_surf_apri = as.numeric(pres_surf_apri),
+      aod_t1 = as.numeric(aod_t1_total),
+      aod_t2 = as.numeric(aod_t2_total),
+      fILS_SB2 = as.numeric(fILS_SB2),
+      fILS_SB5 = as.numeric(fILS_SB5)
+    )
+
+    df_temp <- df_temp |>
+      dplyr::filter(
+        latitude >= -35 & latitude <= 6,
+        longitude >= -75 & longitude <= -33
+      )
+
+    return(df_temp)
+
+  }, error = function(e) {
+    message(paste("Erro ao ler o arquivo:", file_path, "-", e$message))
+    return(NULL)
+  })
+
+  return(date)
+}
+```
+
+```{r}
+# ## Rodando a rotina para todos os arquivos
+# list_files <- list.files(file_path,
+#                              pattern = "\\.h5$",
+#                              full.names = TRUE,
+#                              recursive = TRUE)
+# 
+# df_gosat2 <- map_df(list_files, read_data)
+
+## Corrigindo as datas do banco
+df_gosat2 <- read_rds("../data-raw/df_gosattest_br.rds")
+df_gosat2 <- df_gosat2 |>
+  mutate(
+    date = as_date(date),
+    year  = year(date),
+    month = month(date),
+    day   = day(date)
+  )
+summary(df_gosat2$year)
+```
+
+-   Aplicar correção de viés do XCO2 (Yoshida et al. 2023, Equação 1)
+
+Coeficientes oficiais NIES:
+
+```         
+A0 = -0.89863 → offset global (ppm) 
+A1 = 0.236607 → peso do erro de pressão superficial (ppm/hPa) 
+A2 = -164.121 → peso da espessura óptica de aerossóis (ppm/AOT) 
+A3 = -1.53897 → peso da distorção instrumental na subband 2 (ppm)
+```
+
+-   APLICAR CORREÇÃO DE VIÉS DO XCH4 (Yoshida et al. 2023, Equação 2)
+
+Coeficientes oficiais NIES:
+
+```         
+B0 = 0.529805 → offset global (ppm) 
+B1 = 1.13007e-3 → peso do erro de pressão superficial (ppm/hPa) 
+B2 = -0.320115 → peso da espessura óptica de aerossóis (ppm/AOT) 
+B3 = -0.525923 → peso da distorção instrumental na subband 5 (ppm)
+```
+
+-   Calcular variáveis derivadas comuns
+
+    ΔPs = pressão da superfície - pressão da superfície apriori (hPa) Representa o erro no caminho óptico — quanto maior, maior o potencial de viés
+
+    AOT total = soma da profundidade óptica de aerossóis dos dois tipos em todas as 15 camadas atmosféricas
+
+```{r}
+# Coeficientes oficiais NIES para XCO2 (Equação 1)
+A0 <- -0.89863
+A1 <-  0.236607
+A2 <- -1.64121e2  # -164.121
+A3 <- -1.53897
+
+# Coeficientes oficiais NIES para XCH4 (Equação 2)
+B0 <-  0.529805
+B1 <-  1.13007e-3
+B2 <- -0.320115
+B3 <- -0.525923
+ 
+df_gosat2 <- df_gosat2 |>
+  mutate(
+    delta_ps = pres_surface - pres_surf_apri,
+    aot_total = aod_t1 + aod_t2,
+
+    # --- Correção XCO2 ---
+    correcao_xco2  = A0 + A1 * delta_ps + A2 * aot_total + A3 * fILS_SB2,
+    xco2_corrigido = xco2 + correcao_xco2,
+
+    # --- Correção XCH4 ---
+    correcao_xch4      = B0 + B1 * delta_ps + B2 * aot_total + B3 * fILS_SB5,
+    xch4_corrigido     = xch4 + correcao_xch4,
+    xch4_ppb           = xch4 * 1000,          # converter ppm → ppb
+    xch4_corrigido_ppb = xch4_corrigido * 1000  # converter ppm → ppb
+  )
+```
+
+```{r}
+# Filtrando os quality flag
+
+df_gosat2 <- readRDS("../data-raw/df_gosattest_br.rds")
+df_gosat2_valido <- df_gosat2 |>
+  filter(
+    xco2_quality_flag == 0,
+    xch4_quality_flag == 0,
+    xh2o_quality_flag == 0
+  ) |> 
+  select(
+    latitude, longitude, height, date, year, month, day, xco2_corrigido, xch4_corrigido, xh2o) |> 
+  rename(
+    xco2 = xco2_corrigido,
+    xch4 = xch4_corrigido,
+  )
+
+cat("Total de soundings    :", nrow(df_gosat2), "\n")
+cat("Soundings válidos     :", nrow(df_gosat2_valido), "\n")
+cat("Descartados           :", nrow(df_gosat2) - nrow(df_gosat2_valido), "\n")
+
+##saveRDS(df_gosat2_valido, "../data-raw/df_gosat2_br.rds")
+```
+
+```{r}
+df_gosat2_valido |>
+  summarise(
+    # XCO2
+    xco2_bruto_media     = mean(xco2, na.rm = TRUE),
+    xco2_corr_media      = mean(xco2_corrigido, na.rm = TRUE),
+    xco2_correcao_media  = mean(correcao_xco2, na.rm = TRUE),
+
+    # XCH4
+    xch4_bruto_ppb_media = mean(xch4_ppb, na.rm = TRUE),
+    xch4_corr_ppb_media  = mean(xch4_corrigido_ppb, na.rm = TRUE),
+    xch4_correcao_ppb    = mean(correcao_xch4 * 1000, na.rm = TRUE),
+
+    # XH2O (sem correção)
+    xh2o_media           = mean(xh2o, na.rm = TRUE),
+    xh2o_min             = min(xh2o, na.rm = TRUE),
+    xh2o_max             = max(xh2o, na.rm = TRUE)
+  )
+```
+
+
+```{r}
+## Recorte da Amazônia Legal
+
+amazon_shp <- st_read("../data-raw/shp/pol_amazon.shp")
+amazon_shp <- st_transform(amazon_shp, 4326)
+
+df_gosat2_br <- readRDS("../data-raw/df_gosat2_br.rds")
+
+df_gosat2_br <- st_as_sf(df_gosat2_br,
+                         coords = c("longitude", "latitude"),
+                         crs = 4326,
+                         remove = FALSE)
+
+df_gosat2_amazon <- st_filter(df_gosat2_br, amazon_shp)
+#View(df_gosat2_amazon)
+
+test_g2 <- df_gosat2_amazon |>
+  sf::st_drop_geometry() |> 
+  as_tibble()
+
+## Visualizando
+ggplot() +
+  geom_sf(data = amazon_shp, fill = "grey90", color = "black", size = 0.5) +
+  geom_point(data = test_g2, aes(x = longitude, y = latitude, color = xco2), 
+             size = 1.5, alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma", name = expression(paste(X[CO2], " (ppm)"))) +
+  theme_minimal() +
+  labs(
+    title = "XCO2 na Área de Estudo",
+    subtitle = paste("Total de observações:", nrow(test_g2)),
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+##saveRDS(test_g2, "../data/data-set-gosat2.rds")
+```
+
 
